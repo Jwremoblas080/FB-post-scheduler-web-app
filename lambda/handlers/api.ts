@@ -11,9 +11,16 @@ import {
   getAllPosts,
   getPost,
   deletePost,
+  updatePost,
   updatePostStatus,
   getLatestUser,
+  getPagesByUser,
+  ddb,
+  TABLE,
+  userPK,
+  userSK,
 } from '../services/dynamoDb';
+import { DeleteCommand } from '@aws-sdk/lib-dynamodb';
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
@@ -212,6 +219,94 @@ app.delete('/posts/:id', async (req: Request, res: Response): Promise<void> => {
     if (post.status === 'posted') { res.status(403).json({ error: true, message: 'Cannot delete a post that has already been posted' }); return; }
     await deletePost(id);
     res.json({ success: true, message: 'Post deleted successfully' });
+  } catch (e: any) {
+    res.status(500).json({ error: true, message: e.message });
+  }
+});
+
+// PATCH /posts/:id — edit caption, scheduledTime, or pageId
+app.patch('/posts/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { caption, scheduledTime, pageId } = req.body;
+
+    const post = await getPost(id);
+    if (!post) { res.status(404).json({ error: true, message: 'Post not found' }); return; }
+    if (post.status === 'posted') { res.status(403).json({ error: true, message: 'Cannot edit a post that has already been posted' }); return; }
+
+    const fields: { caption?: string; scheduledTime?: number; pageId?: string } = {};
+
+    if (caption !== undefined) {
+      if (!caption.trim()) { res.status(400).json({ error: true, message: 'Caption cannot be empty' }); return; }
+      fields.caption = caption.trim();
+    }
+    if (scheduledTime !== undefined) {
+      const d = new Date(scheduledTime);
+      if (isNaN(d.getTime())) { res.status(400).json({ error: true, message: 'Invalid scheduledTime' }); return; }
+      if (d <= new Date()) { res.status(400).json({ error: true, message: 'Scheduled time must be in the future' }); return; }
+      fields.scheduledTime = Math.floor(d.getTime() / 1000);
+    }
+    if (pageId !== undefined) {
+      if (!pageId.trim()) { res.status(400).json({ error: true, message: 'pageId cannot be empty' }); return; }
+      fields.pageId = pageId.trim();
+    }
+
+    await updatePost(id, fields);
+
+    const updated = await getPost(id);
+    res.json({
+      success: true,
+      post: {
+        id: updated!.postId,
+        caption: updated!.caption,
+        mediaUrls: updated!.mediaUrls,
+        mediaType: updated!.mediaType,
+        scheduledTime: new Date(updated!.scheduledTime * 1000).toISOString(),
+        status: updated!.status,
+        pageId: updated!.pageId,
+        createdAt: new Date(updated!.createdAt * 1000).toISOString(),
+      },
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: true, message: e.message });
+  }
+});
+
+// POST /posts/:id/retry — reset a failed post back to pending
+app.post('/posts/:id/retry', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const post = await getPost(id);
+    if (!post) { res.status(404).json({ error: true, message: 'Post not found' }); return; }
+    if (post.status !== 'failed') { res.status(400).json({ error: true, message: 'Only failed posts can be retried' }); return; }
+
+    // Bump scheduled time to 2 minutes from now if it's in the past
+    const nowSec = Math.floor(Date.now() / 1000);
+    const fields: { scheduledTime?: number } = {};
+    if (post.scheduledTime <= nowSec) {
+      fields.scheduledTime = nowSec + 120;
+    }
+    if (Object.keys(fields).length) await updatePost(id, fields);
+    await updatePostStatus(id, 'pending');
+
+    res.json({ success: true, message: 'Post queued for retry' });
+  } catch (e: any) {
+    res.status(500).json({ error: true, message: e.message });
+  }
+});
+
+// DELETE /auth/disconnect — clear stored user session
+app.delete('/auth/disconnect', async (_req, res): Promise<void> => {
+  try {
+    const user = await getLatestUser();
+    if (user) {
+      const pages = await getPagesByUser(user.fbUserId);
+      for (const page of pages) {
+        await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { PK: page.PK, SK: page.SK } }));
+      }
+      await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { PK: userPK(user.fbUserId), SK: userSK() } }));
+    }
+    res.json({ success: true });
   } catch (e: any) {
     res.status(500).json({ error: true, message: e.message });
   }

@@ -203,6 +203,40 @@ export async function updatePostStatus(
   }));
 }
 
+export async function updatePost(
+  postId: string,
+  fields: { caption?: string; scheduledTime?: number; pageId?: string },
+): Promise<void> {
+  const sets: string[] = [];
+  const names: Record<string, string> = {};
+  const values: Record<string, any> = {};
+
+  if (fields.caption !== undefined) {
+    sets.push('#caption = :caption');
+    names['#caption'] = 'caption';
+    values[':caption'] = fields.caption;
+  }
+  if (fields.scheduledTime !== undefined) {
+    sets.push('scheduledTime = :st, GSI1SK = :gsi1sk');
+    values[':st'] = fields.scheduledTime;
+    values[':gsi1sk'] = new Date(fields.scheduledTime * 1000).toISOString();
+  }
+  if (fields.pageId !== undefined) {
+    sets.push('pageId = :pageId');
+    values[':pageId'] = fields.pageId;
+  }
+
+  if (sets.length === 0) return;
+
+  await ddb.send(new UpdateCommand({
+    TableName: TABLE,
+    Key: { PK: postPK(postId), SK: postSK() },
+    UpdateExpression: `SET ${sets.join(', ')}`,
+    ...(Object.keys(names).length ? { ExpressionAttributeNames: names } : {}),
+    ExpressionAttributeValues: values,
+  }));
+}
+
 export async function deletePost(postId: string): Promise<void> {
   await ddb.send(new DeleteCommand({
     TableName: TABLE,

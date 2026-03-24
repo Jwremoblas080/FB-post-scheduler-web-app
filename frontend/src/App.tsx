@@ -6,20 +6,17 @@ import PostForm from './components/posts/PostForm';
 import PostList from './components/posts/PostList';
 import ErrorMessage from './components/common/ErrorMessage';
 import Toast from './components/common/Toast';
+import apiClient from './api/client';
 
-interface ToastState {
-  type: 'success' | 'error';
-  message: string;
-  detail?: string;
-}
+interface ToastState { type: 'success' | 'error'; message: string; detail?: string; }
 
 function HomePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isConnected, setIsConnected] = useState(localStorage.getItem('fb_connected') === 'true');
+  const [disconnecting, setDisconnecting] = useState(false);
 
-  // Keep connected state in sync with localStorage (e.g. after OAuth redirect)
   useEffect(() => {
     function syncConnected() {
       setIsConnected(localStorage.getItem('fb_connected') === 'true');
@@ -36,39 +33,47 @@ function HomePage() {
     setToast({ type, message, detail });
   }
 
+  async function handleDisconnect() {
+    setDisconnecting(true);
+    try {
+      await apiClient.delete('/auth/disconnect');
+    } catch { /* best-effort */ } finally {
+      localStorage.removeItem('fb_connected');
+      setIsConnected(false);
+      setDisconnecting(false);
+      showToast('success', 'Disconnected', 'You can now connect a different Facebook account.');
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-logo">F</div>
         <span className="app-header-title">Post Scheduler</span>
         {isConnected && (
-          <span style={{
-            marginLeft: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 13,
-            color: '#2e7d32',
-            background: '#e8f5e9',
-            borderRadius: 20,
-            padding: '4px 12px',
-            fontWeight: 500,
-          }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#43a047', display: 'inline-block' }} />
-            Connected to Facebook
-          </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="connected-badge">
+              <span className="connected-dot" />
+              Connected to Facebook
+            </span>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+            >
+              {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+            </button>
+          </div>
         )}
       </header>
 
       <main className="app-main">
-        {/* Login */}
+        {/* Account */}
         <div className="card">
           <p className="section-label">Account</p>
           <div className="login-section">
             <LoginButton onError={setLoginError} />
-            {loginError && (
-              <ErrorMessage error={loginError} onDismiss={() => setLoginError(null)} />
-            )}
+            {loginError && <ErrorMessage error={loginError} onDismiss={() => setLoginError(null)} />}
           </div>
         </div>
 
@@ -77,7 +82,7 @@ function HomePage() {
           <p className="section-label">New Post</p>
           <PostForm
             onSuccess={() => {
-              setRefreshKey((k: number) => k + 1);
+              setRefreshKey(k => k + 1);
               showToast('success', 'Post scheduled!', 'Your post has been added to the queue.');
             }}
             onError={(msg) => showToast('error', 'Failed to schedule post', msg)}
@@ -92,12 +97,7 @@ function HomePage() {
       </main>
 
       {toast && (
-        <Toast
-          type={toast.type}
-          message={toast.message}
-          detail={toast.detail}
-          onDismiss={() => setToast(null)}
-        />
+        <Toast type={toast.type} message={toast.message} detail={toast.detail} onDismiss={() => setToast(null)} />
       )}
     </div>
   );
