@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import apiClient from '../../api/client';
+import ConfirmModal from '../common/ConfirmModal';
 
 interface Post {
   id: number;
@@ -49,6 +50,7 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmPost, setConfirmPost] = useState<Post | null>(null);
 
   const fetchPosts = useCallback(async () => {
     setLoading(true); setError('');
@@ -72,7 +74,7 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
   useEffect(() => { fetchPosts(); }, [fetchPosts, refreshKey]);
 
   async function handleDelete(postId: number) {
-    if (!window.confirm('Delete this post?')) return;
+    setConfirmPost(null);
     setDeletingId(postId);
     try {
       await apiClient.delete(`/posts/${postId}`);
@@ -89,53 +91,63 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
   if (posts.length === 0) return <div className="empty-state">No scheduled posts yet.</div>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {posts.map(post => {
-        const paths = parseMediaPaths(post.mediaUrls);
-        const canDelete = post.status === 'pending' || post.status === 'failed';
-        const firstPath = paths[0];
+    <>
+      {confirmPost && (
+        <ConfirmModal
+          title="Delete this post?"
+          message={`"${confirmPost.caption.slice(0, 60)}${confirmPost.caption.length > 60 ? '…' : ''}"`}
+          onConfirm={() => handleDelete(confirmPost.id)}
+          onCancel={() => setConfirmPost(null)}
+        />
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {posts.map(post => {
+          const paths = parseMediaPaths(post.mediaUrls);
+          const canDelete = post.status === 'pending' || post.status === 'failed';
+          const firstPath = paths[0];
 
-        return (
-          <div key={post.id} className="post-card">
-            {/* Thumbnail */}
-            <div className="post-thumb">
-              {post.mediaType === 'video' ? (
-                <span className="post-thumb-video">Vid</span>
-              ) : (
-                <img src={firstPath.startsWith('http') ? firstPath : `/${firstPath.replace(/^\//, '')}`} alt="thumbnail" />
-              )}
-            </div>
-
-            {/* Details */}
-            <div className="post-body">
-              <div className="post-meta">
-                <span className={BADGE[post.status]}>{post.status}</span>
-                {post.pageName && <span className="post-page">{post.pageName}</span>}
-                {paths.length > 1 && (
-                  <span style={{ fontSize: 11, color: 'var(--text-light)' }}>+{paths.length - 1} more</span>
+          return (
+            <div key={post.id} className="post-card">
+              {/* Thumbnail */}
+              <div className="post-thumb">
+                {post.mediaType === 'video' ? (
+                  <span className="post-thumb-video">Vid</span>
+                ) : (
+                  <img src={firstPath.startsWith('http') ? firstPath : `/${firstPath.replace(/^\//, '')}`} alt="thumbnail" />
                 )}
               </div>
-              <p className="post-caption">{post.caption}</p>
-              <p className="post-time">{formatDateTime(post.scheduledTime)}</p>
-              {post.status === 'failed' && post.errorMessage && (
-                <p className="post-error">{post.errorMessage}</p>
+
+              {/* Details */}
+              <div className="post-body">
+                <div className="post-meta">
+                  <span className={BADGE[post.status]}>{post.status}</span>
+                  {post.pageName && <span className="post-page">{post.pageName}</span>}
+                  {paths.length > 1 && (
+                    <span style={{ fontSize: 11, color: 'var(--text-light)' }}>+{paths.length - 1} more</span>
+                  )}
+                </div>
+                <p className="post-caption">{post.caption}</p>
+                <p className="post-time">{formatDateTime(post.scheduledTime)}</p>
+                {post.status === 'failed' && post.errorMessage && (
+                  <p className="post-error">{post.errorMessage}</p>
+                )}
+              </div>
+
+              {/* Delete */}
+              {canDelete && (
+                <button
+                  onClick={() => setConfirmPost(post)}
+                  disabled={deletingId === post.id}
+                  className="btn btn-danger-ghost"
+                  aria-label={`Delete post ${post.id}`}
+                >
+                  {deletingId === post.id ? '…' : 'Delete'}
+                </button>
               )}
             </div>
-
-            {/* Delete */}
-            {canDelete && (
-              <button
-                onClick={() => handleDelete(post.id)}
-                disabled={deletingId === post.id}
-                className="btn btn-danger-ghost"
-                aria-label={`Delete post ${post.id}`}
-              >
-                {deletingId === post.id ? '…' : 'Delete'}
-              </button>
-            )}
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
