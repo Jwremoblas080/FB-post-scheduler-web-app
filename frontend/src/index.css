@@ -700,3 +700,20 @@ select {
   max-width: 480px;
   text-align: left;
 }
+
+/* Not connected placeholder */
+.not-connected-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 20px;
+  color: var(--text-light);
+  font-size: 14px;
+  text-align: center;
+}
+
+.not-connected-icon {
+  font-size: 28px;
+  opacity: 0.6;
+}

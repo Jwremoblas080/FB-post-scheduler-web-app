@@ -72,28 +72,42 @@ function HomePage() {
         <div className="card">
           <p className="section-label">Account</p>
           <div className="login-section">
-            <LoginButton onError={setLoginError} />
+            <LoginButton
+              onError={setLoginError}
+            />
             {loginError && <ErrorMessage error={loginError} onDismiss={() => setLoginError(null)} />}
           </div>
         </div>
 
-        {/* Create post */}
-        <div className="card">
-          <p className="section-label">New Post</p>
-          <PostForm
-            onSuccess={() => {
-              setRefreshKey(k => k + 1);
-              showToast('success', 'Post scheduled!', 'Your post has been added to the queue.');
-            }}
-            onError={(msg) => showToast('error', 'Failed to schedule post', msg)}
-          />
-        </div>
+        {/* Create post — only shown when connected */}
+        {isConnected ? (
+          <div className="card">
+            <p className="section-label">New Post</p>
+            <PostForm
+              onSuccess={() => {
+                setRefreshKey(k => k + 1);
+                showToast('success', 'Post scheduled!', 'Your post has been added to the queue.');
+              }}
+              onError={(msg) => showToast('error', 'Failed to schedule post', msg)}
+            />
+          </div>
+        ) : (
+          <div className="card">
+            <p className="section-label">New Post</p>
+            <div className="not-connected-state">
+              <span className="not-connected-icon">🔒</span>
+              <p>Connect your Facebook account to schedule posts.</p>
+            </div>
+          </div>
+        )}
 
-        {/* Post list */}
-        <div className="card">
-          <p className="section-label">Scheduled</p>
-          <PostList refreshKey={refreshKey} />
-        </div>
+        {/* Post list — only shown when connected */}
+        {isConnected && (
+          <div className="card">
+            <p className="section-label">Scheduled</p>
+            <PostList refreshKey={refreshKey} />
+          </div>
+        )}
       </main>
 
       {toast && (
