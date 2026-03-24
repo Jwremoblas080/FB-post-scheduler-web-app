@@ -53,6 +53,20 @@ export function initializeDatabase(dbPath: string = './data/scheduler.db'): Data
     ON posts(scheduled_time, status)
   `);
 
+  // Migration: add pages table if it doesn't exist (for existing DBs)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      page_id TEXT NOT NULL,
+      page_name TEXT NOT NULL,
+      page_access_token TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(user_id, page_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   return db;
 }
 

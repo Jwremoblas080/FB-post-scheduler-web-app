@@ -2,12 +2,27 @@ import Database from 'better-sqlite3';
 import { Post, PublishResult } from '../types';
 import { GraphApiClient } from './graphApiClient';
 import { PostManagementService } from './postService';
+import { AuthenticationService } from './authService';
 import { decrypt } from '../utils/encryption';
 
 const MAX_REQUESTS_PER_HOUR = 200;
 const RATE_LIMIT_THRESHOLD = 180; // queue posts when approaching limit
 const MAX_RETRY_ATTEMPTS = 4;
 const BASE_BACKOFF_MS = 1000; // 1s, 2s, 4s, 8s
+
+/**
+ * Build a publicly accessible URL for a media path.
+ * Local paths like "uploads/file.jpg" or "/uploads/file.jpg" are resolved
+ * against the server's public base URL so Facebook can fetch them.
+ */
+function toPublicUrl(mediaPath: string): string {
+  if (mediaPath.startsWith('http://') || mediaPath.startsWith('https://')) {
+    return mediaPath;
+  }
+  const base = (process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+  const normalized = mediaPath.startsWith('/') ? mediaPath : `/${mediaPath}`;
+  return `${base}${normalized}`;
+}
 
 /**
  * Scheduler Service for automated post publishing
@@ -17,6 +32,7 @@ export class SchedulerService {
   private db: Database.Database;
   private graphApiClient: GraphApiClient;
   private postService: PostManagementService;
+  private authService: AuthenticationService;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
@@ -26,11 +42,13 @@ export class SchedulerService {
   constructor(
     db: Database.Database,
     graphApiClient: GraphApiClient,
-    postService: PostManagementService
+    postService: PostManagementService,
+    authService: AuthenticationService
   ) {
     this.db = db;
     this.graphApiClient = graphApiClient;
     this.postService = postService;
+    this.authService = authService;
   }
 
   /**
@@ -186,10 +204,10 @@ export class SchedulerService {
       caption: row.caption,
       mediaUrls: JSON.parse(row.media_url),
       mediaType: row.media_type,
-      scheduledTime: new Date(row.scheduled_time * 1000),
+      scheduledTime: new Date(row.scheduled_time * 1000).toISOString(),
       status: row.status,
       pageId: row.page_id,
-      createdAt: new Date(row.created_at * 1000),
+      createdAt: new Date(row.created_at * 1000).toISOString(),
       errorMessage: row.error_message || undefined
     }));
   }
@@ -263,33 +281,33 @@ export class SchedulerService {
       let result: PublishResult;
       
       if (post.mediaType === 'video') {
-        // Single video post
-        // Requirements: 6.4, 6.5
         this.recordApiRequest(post.userId);
+        const videoUrl = toPublicUrl(post.mediaUrls[0]);
+        console.log(`[${timestamp}] Publishing video to Facebook: ${videoUrl}`);
         result = await this.graphApiClient.publishVideo(
           post.pageId,
           pageAccessToken,
-          post.mediaUrls[0],
+          videoUrl,
           post.caption
         );
       } else if (post.mediaUrls.length === 1) {
-        // Single image post
-        // Requirements: 6.3, 6.5
         this.recordApiRequest(post.userId);
+        const photoUrl = toPublicUrl(post.mediaUrls[0]);
+        console.log(`[${timestamp}] Publishing photo to Facebook: ${photoUrl}`);
         result = await this.graphApiClient.publishPhoto(
           post.pageId,
           pageAccessToken,
-          post.mediaUrls[0],
+          photoUrl,
           post.caption
         );
       } else {
-        // Multiple images post
-        // Requirements: 6.3, 6.5
         this.recordApiRequest(post.userId);
+        const photoUrls = post.mediaUrls.map(toPublicUrl);
+        console.log(`[${timestamp}] Publishing ${photoUrls.length} photos to Facebook:`, photoUrls);
         result = await this.graphApiClient.publishPhotos(
           post.pageId,
           pageAccessToken,
-          post.mediaUrls,
+          photoUrls,
           post.caption
         );
       }
@@ -344,10 +362,15 @@ export class SchedulerService {
   }
 
   /**
-   * Get page access token from Graph API
+   * Get page access token — use DB cache first, live API as fallback
    * Requirements: 2.1, 2.2
    */
   private async getPageAccessToken(userAccessToken: string, pageId: string): Promise<string | null> {
+    // Try cached token first
+    const cached = this.authService.getCachedPageToken(pageId);
+    if (cached) return cached;
+
+    // Fall back to live API
     try {
       const pages = await this.graphApiClient.getPages(userAccessToken);
       const page = pages.find(p => p.id === pageId);

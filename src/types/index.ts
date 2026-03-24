@@ -14,10 +14,10 @@ export interface Post {
   caption: string;
   mediaUrls: string[];
   mediaType: 'image' | 'video';
-  scheduledTime: Date;
+  scheduledTime: string;
   status: 'pending' | 'posted' | 'failed';
   pageId: string;
-  createdAt: Date;
+  createdAt: string;
   errorMessage?: string;
 }
 

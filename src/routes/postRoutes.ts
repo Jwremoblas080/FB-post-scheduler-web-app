@@ -23,12 +23,23 @@ export function initializePostRoutes(database?: Database.Database) {
  */
 router.post('/', (req: Request, res: Response) => {
   try {
-    const { caption, mediaPaths, mediaUrls, mediaType, scheduledTime, pageId, userId } = req.body;
+    const { caption, mediaPaths, mediaUrls, mediaType, scheduledTime, pageId } = req.body;
 
-    // Accept mediaPaths (frontend field name) or mediaUrls (legacy)
+    // Single-user app: look up the most recently logged-in user
+    const userRow = (db as any).prepare(
+      'SELECT id FROM users ORDER BY created_at DESC LIMIT 1'
+    ).get() as { id: number } | undefined;
+
+    if (!userRow) {
+      res.status(401).json({
+        error: true,
+        message: 'Not logged in. Please connect with Facebook first.',
+        code: 'NOT_AUTHENTICATED'
+      });
+      return;
+    }
+
     const resolvedMediaUrls = mediaPaths || mediaUrls;
-
-    // Convert scheduledTime string to Date object
     const scheduledDate = new Date(scheduledTime);
 
     const postData: PostData = {
@@ -37,7 +48,7 @@ router.post('/', (req: Request, res: Response) => {
       mediaType,
       scheduledTime: scheduledDate,
       pageId,
-      userId
+      userId: userRow.id
     };
 
     const createdPost = postService.createPost(postData);

@@ -33,6 +33,14 @@ router.post('/login', (_req: Request, res: Response) => {
     if (!authService) {
       initializeAuthRoutes();
     }
+    if (!process.env.FACEBOOK_APP_ID || !process.env.FACEBOOK_APP_SECRET) {
+      res.status(500).json({
+        error: true,
+        message: 'Facebook App ID or Secret not configured. Check your .env file.',
+        code: 'MISSING_CONFIG'
+      });
+      return;
+    }
     const redirectUrl = authService.initiateLogin();
     res.json({ redirectUrl });
   } catch (error: any) {
@@ -71,11 +79,18 @@ router.get('/callback', async (req: Request, res: Response): Promise<void> => {
     const accessToken = await authService.handleCallback(code);
 
     // Use the access token itself as a unique identifier for the user.
-    // The token is unique per user/session and avoids an extra Graph API call.
     const facebookUserId = accessToken.token;
 
-    // Store the access token in database
-    authService.storeToken(facebookUserId, accessToken);
+    // Store the access token in database, get back the user id
+    const userId = authService.storeToken(facebookUserId, accessToken);
+
+    // Fetch and cache pages while we have a live connection (best-effort)
+    try {
+      const pages = await graphApiClient.getPages(accessToken.token);
+      authService.storePages(userId, pages);
+    } catch (pageErr) {
+      console.warn('Could not fetch pages during OAuth (will retry on /auth/pages):', (pageErr as Error).message);
+    }
 
     // Redirect browser to frontend callback route to show success
     res.redirect(`${frontendUrl}/auth/callback`);
@@ -87,48 +102,49 @@ router.get('/callback', async (req: Request, res: Response): Promise<void> => {
 
 /**
  * GET /auth/pages
- * Retrieve user's Facebook Pages
+ * Retrieve user's Facebook Pages — served from DB cache, live API as fallback
  * Requirements: 2.1
  */
 router.get('/pages', async (_req: Request, res: Response): Promise<void> => {
   try {
-    // Single-user app: retrieve the most recently stored token from the database
+    // Try cached pages first (no network needed)
+    const cached = authService.getCachedPages();
+    if (cached.length > 0) {
+      res.json({ success: true, pages: cached });
+      return;
+    }
+
+    // No cache — check if user exists at all
     const row = (db as any).prepare(
-      'SELECT facebook_user_id FROM users ORDER BY created_at DESC LIMIT 1'
-    ).get() as { facebook_user_id: string } | undefined;
+      'SELECT id, facebook_user_id FROM users ORDER BY created_at DESC LIMIT 1'
+    ).get() as { id: number; facebook_user_id: string } | undefined;
 
     if (!row) {
       res.status(401).json({
         error: true,
-        message: 'Access token not found. Please log in again.',
+        message: 'Not connected. Please connect with Facebook first.',
         code: 'MISSING_ACCESS_TOKEN'
       });
       return;
     }
 
-    const accessToken = authService.getStoredToken(row.facebook_user_id);
-
-    if (!accessToken) {
-      res.status(401).json({
-        error: true,
-        message: 'Access token not found. Please log in again.',
-        code: 'MISSING_ACCESS_TOKEN'
-      });
-      return;
-    }
-
-    // Retrieve Facebook Pages using Graph API
-    const pages = await graphApiClient.getPages(accessToken.token);
-
+    // User exists but no cached pages — need to re-authenticate to fetch pages
+    // Return empty pages with a hint so the frontend can prompt re-auth
     res.json({
       success: true,
-      pages: pages
+      pages: [],
+      hint: 'Please reconnect with Facebook to load your pages.'
     });
   } catch (error: any) {
-    res.status(500).json({
+    const isNetworkError = error.message?.includes('ENOTFOUND') ||
+                           error.message?.includes('ECONNREFUSED') ||
+                           error.message?.includes('network');
+    res.status(isNetworkError ? 503 : 500).json({
       error: true,
-      message: 'Failed to retrieve Facebook Pages',
-      code: 'PAGES_RETRIEVAL_FAILED',
+      message: isNetworkError
+        ? 'Cannot reach Facebook API. Check your internet connection.'
+        : 'Failed to retrieve Facebook Pages',
+      code: isNetworkError ? 'NETWORK_ERROR' : 'PAGES_RETRIEVAL_FAILED',
       details: error.message
     });
   }

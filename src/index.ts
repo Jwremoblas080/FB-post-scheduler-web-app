@@ -1,10 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import authRoutes, { initializeAuthRoutes } from './routes/authRoutes';
 import postRoutes, { initializePostRoutes } from './routes/postRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import { getDatabase } from './database/init';
+import { SchedulerService } from './services/schedulerService';
+import { GraphApiClient } from './services/graphApiClient';
+import { PostManagementService } from './services/postService';
+import { AuthenticationService } from './services/authService';
 import { 
   enforceHttps, 
   sanitizeInput, 
@@ -38,6 +43,10 @@ app.use('/auth', authRoutes);
 app.use('/posts', postRoutes);
 app.use('/upload', uploadRoutes);
 
+// Serve uploaded files as static assets
+const uploadDir = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
+app.use('/uploads', express.static(uploadDir));
+
 // Health check endpoint
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Facebook Post Scheduler API is running' });
@@ -46,6 +55,18 @@ app.get('/health', (_req, res) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+
+  // Start the scheduler inline so it runs with the API server
+  const graphApiClient = new GraphApiClient();
+  const postService = new PostManagementService(db);
+  const authService = new AuthenticationService(
+    process.env.FACEBOOK_APP_ID || '',
+    process.env.FACEBOOK_APP_SECRET || '',
+    process.env.FACEBOOK_REDIRECT_URI || '',
+    db
+  );
+  const scheduler = new SchedulerService(db, graphApiClient, postService, authService);
+  scheduler.start();
 });
 
 export default app;

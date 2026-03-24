@@ -6,13 +6,13 @@ interface Post {
   userId: number;
   caption: string;
   mediaType: 'image' | 'video';
-  mediaPaths: string;
-  scheduledTime: string;
+  mediaUrls: string[];
+  scheduledTime: string | number;
   pageId: string;
   pageName?: string;
   status: 'pending' | 'posted' | 'failed';
   errorMessage?: string;
-  createdAt: string;
+  createdAt: string | number;
 }
 
 interface PostListProps { refreshKey?: number; }
@@ -23,15 +23,22 @@ const BADGE: Record<Post['status'], string> = {
   failed: 'badge badge-failed',
 };
 
-function parseMediaPaths(mediaPaths: string): string[] {
+function parseMediaPaths(mediaUrls: string | string[]): string[] {
+  if (Array.isArray(mediaUrls)) return mediaUrls;
   try {
-    const parsed = JSON.parse(mediaPaths);
-    return Array.isArray(parsed) ? parsed : [mediaPaths];
-  } catch { return [mediaPaths]; }
+    const parsed = JSON.parse(mediaUrls);
+    return Array.isArray(parsed) ? parsed : [mediaUrls];
+  } catch { return [mediaUrls]; }
 }
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
+function formatDateTime(value: string | number): string {
+  // Handle Unix timestamps (seconds) — numbers or numeric strings
+  const num = typeof value === 'number' ? value : Number(value);
+  const date = !isNaN(num) && num > 1_000_000_000
+    ? new Date(num * 1000)   // Unix seconds → ms
+    : new Date(value);       // ISO string
+  if (isNaN(date.getTime())) return String(value);
+  return date.toLocaleString(undefined, {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
@@ -47,9 +54,13 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
     setLoading(true); setError('');
     try {
       const res = await apiClient.get<{ posts: Post[] }>('/posts');
-      const sorted = [...res.data.posts].sort(
-        (a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()
-      );
+      const sorted = [...res.data.posts].sort((a, b) => {
+        const toMs = (v: string | number) => {
+          const n = typeof v === 'number' ? v : Number(v);
+          return !isNaN(n) && n > 1_000_000_000 ? n * 1000 : new Date(v).getTime();
+        };
+        return toMs(a.scheduledTime) - toMs(b.scheduledTime);
+      });
       setPosts(sorted);
     } catch {
       setError('Failed to load posts. Please try again.');
@@ -80,7 +91,7 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {posts.map(post => {
-        const paths = parseMediaPaths(post.mediaPaths);
+        const paths = parseMediaPaths(post.mediaUrls);
         const canDelete = post.status === 'pending' || post.status === 'failed';
         const firstPath = paths[0];
 
@@ -91,7 +102,7 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
               {post.mediaType === 'video' ? (
                 <span className="post-thumb-video">Vid</span>
               ) : (
-                <img src={`http://localhost:3000${firstPath}`} alt="thumbnail" />
+                <img src={firstPath.startsWith('http') ? firstPath : `/${firstPath.replace(/^\//, '')}`} alt="thumbnail" />
               )}
             </div>
 

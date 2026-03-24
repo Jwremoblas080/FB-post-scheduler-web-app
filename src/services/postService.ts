@@ -52,10 +52,10 @@ export class PostManagementService {
       caption: postData.caption,
       mediaUrls: postData.mediaUrls,
       mediaType: postData.mediaType,
-      scheduledTime: postData.scheduledTime,
+      scheduledTime: postData.scheduledTime.toISOString(),
       status: 'pending',
       pageId: postData.pageId,
-      createdAt: new Date(createdAtTimestamp * 1000)
+      createdAt: new Date(createdAtTimestamp * 1000).toISOString()
     };
   }
 
@@ -88,10 +88,10 @@ export class PostManagementService {
       caption: row.caption,
       mediaUrls: JSON.parse(row.media_url),
       mediaType: row.media_type,
-      scheduledTime: new Date(row.scheduled_time * 1000),
+      scheduledTime: new Date(row.scheduled_time * 1000).toISOString(),
       status: row.status,
       pageId: row.page_id,
-      createdAt: new Date(row.created_at * 1000),
+      createdAt: new Date(row.created_at * 1000).toISOString(),
       errorMessage: row.error_message || undefined
     }));
   }
@@ -127,10 +127,10 @@ export class PostManagementService {
       caption: row.caption,
       mediaUrls: JSON.parse(row.media_url),
       mediaType: row.media_type,
-      scheduledTime: new Date(row.scheduled_time * 1000),
+      scheduledTime: new Date(row.scheduled_time * 1000).toISOString(),
       status: row.status,
       pageId: row.page_id,
-      createdAt: new Date(row.created_at * 1000),
+      createdAt: new Date(row.created_at * 1000).toISOString(),
       errorMessage: row.error_message || undefined
     }));
   }

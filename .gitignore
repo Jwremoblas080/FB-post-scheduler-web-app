@@ -6,6 +6,8 @@ dist/
 
 # Environment variables
 .env
+.env.local
+.env.*.local
 
 # Database
 *.sqlite
@@ -30,3 +32,7 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Serverless
+lambda/.serverless/
+lambda/dist/

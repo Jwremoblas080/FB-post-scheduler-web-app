@@ -108,6 +108,8 @@ export function excludeTokensFromResponse(_req: Request, res: Response, next: Ne
 
 /**
  * Recursively remove token fields from response objects
+ * Only strip fields that are clearly internal auth tokens, not page access tokens
+ * that need to be returned to the client.
  */
 function removeTokens(obj: any): any {
   if (typeof obj !== 'object' || obj === null) {
@@ -121,10 +123,10 @@ function removeTokens(obj: any): any {
   const filtered: any = {};
   for (const key in obj) {
     if (obj.hasOwnProperty(key)) {
-      // Skip token-related fields
       const lowerKey = key.toLowerCase();
-      if (lowerKey.includes('token') || lowerKey.includes('secret') || lowerKey.includes('password')) {
-        continue; // Exclude this field
+      // Only strip internal server-side fields, not page accessToken needed by frontend
+      if (lowerKey === 'access_token' || lowerKey === 'secret' || lowerKey === 'password') {
+        continue;
       }
       filtered[key] = removeTokens(obj[key]);
     }

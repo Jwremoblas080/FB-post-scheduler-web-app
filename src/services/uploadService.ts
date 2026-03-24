@@ -115,7 +115,8 @@ export class UploadService {
         // Write file to disk
         await writeFile(filepath, file.buffer);
         
-        uploadedPaths.push(filepath);
+        // Normalize to forward slashes for use as URL paths
+        uploadedPaths.push(filepath.replace(/\\/g, '/'));
         filesToCleanup.push(filepath);
       }
 
@@ -148,7 +149,8 @@ export class UploadService {
       // Write file to disk
       await writeFile(filepath, file.buffer);
 
-      return filepath;
+      // Normalize to forward slashes for use as URL paths
+      return filepath.replace(/\\/g, '/');
     } catch (error) {
       // Clean up partial upload if file was created
       if (filepath) {

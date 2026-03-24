@@ -9,6 +9,10 @@ import { getDatabase } from './database/init';
 import { SchedulerService } from './services/schedulerService';
 import { GraphApiClient } from './services/graphApiClient';
 import { PostManagementService } from './services/postService';
+import { AuthenticationService } from './services/authService';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // Initialize database
 const db = getDatabase();
@@ -16,7 +20,13 @@ const db = getDatabase();
 // Initialize services
 const graphApiClient = new GraphApiClient();
 const postService = new PostManagementService(db);
-const schedulerService = new SchedulerService(db, graphApiClient, postService);
+const authService = new AuthenticationService(
+  process.env.FACEBOOK_APP_ID || '',
+  process.env.FACEBOOK_APP_SECRET || '',
+  process.env.FACEBOOK_REDIRECT_URI || '',
+  db
+);
+const schedulerService = new SchedulerService(db, graphApiClient, postService, authService);
 
 // Start the scheduler
 console.log('Starting Facebook Post Scheduler...');

@@ -53,9 +53,9 @@ export class AuthenticationService {
 
       const { access_token, expires_in } = response.data;
 
-      // Calculate expiry date
+      // Calculate expiry date — default to 60 days if expires_in not provided
       const expiry = new Date();
-      expiry.setSeconds(expiry.getSeconds() + expires_in);
+      expiry.setSeconds(expiry.getSeconds() + (expires_in || 60 * 24 * 60 * 60));
 
       return {
         token: access_token,
@@ -76,7 +76,7 @@ export class AuthenticationService {
    * Store access token with encryption in the database
    * Requirements: 1.3, 9.1
    */
-  storeToken(facebookUserId: string, accessToken: AccessToken): void {
+  storeToken(facebookUserId: string, accessToken: AccessToken): number {
     const encryptedToken = encrypt(accessToken.token);
     const tokenExpiryTimestamp = Math.floor(accessToken.expiry.getTime() / 1000);
     const createdAtTimestamp = Math.floor(Date.now() / 1000);
@@ -84,22 +84,62 @@ export class AuthenticationService {
     // Check if user already exists
     const existingUser = this.db.prepare(
       'SELECT id FROM users WHERE facebook_user_id = ?'
-    ).get(facebookUserId);
+    ).get(facebookUserId) as { id: number } | undefined;
 
     if (existingUser) {
-      // Update existing user
       this.db.prepare(`
         UPDATE users 
         SET access_token = ?, token_expiry = ?
         WHERE facebook_user_id = ?
       `).run(encryptedToken, tokenExpiryTimestamp, facebookUserId);
+      return existingUser.id;
     } else {
-      // Insert new user
-      this.db.prepare(`
+      const result = this.db.prepare(`
         INSERT INTO users (facebook_user_id, access_token, token_expiry, created_at)
         VALUES (?, ?, ?, ?)
       `).run(facebookUserId, encryptedToken, tokenExpiryTimestamp, createdAtTimestamp);
+      return result.lastInsertRowid as number;
     }
+  }
+
+  /**
+   * Cache Facebook Pages for a user so they can be served without a live API call
+   */
+  storePages(userId: number, pages: Array<{ id: string; name: string; accessToken: string }>): void {
+    const now = Math.floor(Date.now() / 1000);
+    // Delete old pages for this user first
+    this.db.prepare('DELETE FROM pages WHERE user_id = ?').run(userId);
+    const insert = this.db.prepare(`
+      INSERT INTO pages (user_id, page_id, page_name, page_access_token, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    for (const page of pages) {
+      insert.run(userId, page.id, page.name, encrypt(page.accessToken), now);
+    }
+  }
+
+  /**
+   * Retrieve cached pages for the most recent user
+   */
+  getCachedPages(): Array<{ id: string; name: string }> {
+    const rows = this.db.prepare(`
+      SELECT p.page_id, p.page_name
+      FROM pages p
+      INNER JOIN users u ON u.id = p.user_id
+      ORDER BY u.created_at DESC
+    `).all() as Array<{ page_id: string; page_name: string }>;
+    return rows.map(r => ({ id: r.page_id, name: r.page_name }));
+  }
+
+  /**
+   * Retrieve cached page access token by page_id
+   */
+  getCachedPageToken(pageId: string): string | null {
+    const row = this.db.prepare(
+      'SELECT page_access_token FROM pages WHERE page_id = ?'
+    ).get(pageId) as { page_access_token: string } | undefined;
+    if (!row) return null;
+    try { return decrypt(row.page_access_token); } catch { return null; }
   }
 
   /**

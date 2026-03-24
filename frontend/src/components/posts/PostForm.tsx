@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import apiClient from '../../api/client';
 
 interface Page { id: string; name: string; }
-interface PostFormProps { onSuccess?: () => void; }
+interface PostFormProps { onSuccess?: () => void; onError?: (msg: string) => void; }
 interface FormErrors {
   caption?: string; media?: string; scheduledTime?: string; pageId?: string; submit?: string;
 }
@@ -13,7 +13,7 @@ const MAX_IMAGE_SIZE = 4 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 const MAX_IMAGES = 10;
 
-export default function PostForm({ onSuccess }: PostFormProps) {
+export default function PostForm({ onSuccess, onError }: PostFormProps) {
   const [pages, setPages] = useState<Page[]>([]);
   const [pagesError, setPagesError] = useState('');
   const [mediaType, setMediaType] = useState<'images' | 'video'>('images');
@@ -30,9 +30,27 @@ export default function PostForm({ onSuccess }: PostFormProps) {
   const videoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    apiClient.get<{ pages: Page[] }>('/auth/pages')
-      .then(res => setPages(res.data.pages))
-      .catch(() => setPagesError('Failed to load pages. Please log in first.'));
+    apiClient.get<{ pages: Page[]; hint?: string }>('/auth/pages')
+      .then(res => {
+        if (res.data.pages.length === 0 && res.data.hint) {
+          setPagesError('Pages not loaded. Please click "Connect with Facebook" again to refresh.');
+        } else {
+        setPages(res.data.pages.filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i));
+        }
+      })
+      .catch((err) => {
+        const status = err?.response?.status;
+        const code = err?.response?.data?.code;
+        if (status === 401) {
+          localStorage.removeItem('fb_connected');
+          setPagesError('Not connected. Please click "Connect with Facebook".');
+        } else if (code === 'NETWORK_ERROR' || status === 503) {
+          setPagesError('Server has no internet access. Check backend network connection.');
+        } else {
+          localStorage.removeItem('fb_connected');
+          setPagesError('Failed to load pages. Please log in first.');
+        }
+      });
   }, []);
 
   function handleMediaTypeChange(type: 'images' | 'video') {
@@ -109,14 +127,20 @@ export default function PostForm({ onSuccess }: PostFormProps) {
         const res = await apiClient.post<{ filePath: string }>('/upload/video', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
         mediaPaths = [res.data.filePath];
       }
-      await apiClient.post('/posts', { caption, mediaType, mediaPaths, scheduledTime: new Date(scheduledTime).toISOString(), pageId });
+      await apiClient.post('/posts', { caption, mediaType: mediaType === 'images' ? 'image' : 'video', mediaPaths, scheduledTime: new Date(scheduledTime).toISOString(), pageId });
       setCaption(''); setScheduledTime(''); setPageId('');
       setImageFiles([]); setImagePreviews([]);
       setVideoFile(null); setVideoPreview('');
       onSuccess?.();
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to create post.';
+      const response = (err as { response?: { data?: { message?: string; error?: string } } })?.response;
+      const message = response?.data?.message
+        || response?.data?.error
+        || (err as Error)?.message
+        || 'Failed to create post.';
+      console.error('Post creation error:', err);
       setErrors({ submit: message });
+      onError?.(message);
     } finally {
       setSubmitting(false);
     }

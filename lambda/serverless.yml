@@ -1,0 +1,146 @@
+service: fb-post-scheduler
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 29
+  environment:
+    STAGE: ${self:provider.stage}
+    FACEBOOK_APP_ID: '2790308504644722'
+    FACEBOOK_APP_SECRET: '50e5bd23e3798dc46ecb1de6d280924c'
+    FACEBOOK_REDIRECT_URI: 'https://njidx1ny8i.execute-api.us-east-1.amazonaws.com/auth/callback'
+    ENCRYPTION_KEY: 'opEIH795ydKhJtMZ6Dk2cjsuVAWNvbSG'
+    ENCRYPTION_SECRET: 'opEIH795ydKhJtMZ6Dk2cjsuVAWNvbSG'
+    S3_BUCKET: ${self:custom.s3Bucket}
+    DYNAMODB_TABLE: ${self:custom.dynamoTable}
+    FRONTEND_URL: 'http://localhost:5173'
+    ALLOWED_ORIGINS: 'http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177,http://localhost:5178'
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource:
+            - !GetAtt SchedulerTable.Arn
+            - !Sub '${SchedulerTable.Arn}/index/*'
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+          Resource: !Sub 'arn:aws:s3:::${self:custom.s3Bucket}/*'
+
+custom:
+  s3Bucket: fb-post-scheduler-uploads-${self:provider.stage}
+  dynamoTable: fb-post-scheduler-${self:provider.stage}
+
+functions:
+  api:
+    handler: dist/handlers/api.handler
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+      - httpApi:
+          path: /
+          method: ANY
+
+  scheduler:
+    handler: dist/handlers/scheduler.handler
+    timeout: 300
+    events:
+      - schedule:
+          rate: rate(1 minute)
+          enabled: true
+
+resources:
+  Resources:
+    SchedulerTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.dynamoTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+          - AttributeName: GSI1PK
+            AttributeType: S
+          - AttributeName: GSI1SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: GSI1
+            KeySchema:
+              - AttributeName: GSI1PK
+                KeyType: HASH
+              - AttributeName: GSI1SK
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+
+    MediaBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.s3Bucket}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders: ['*']
+              AllowedMethods: [GET, PUT, POST]
+              AllowedOrigins: ['*']
+              MaxAge: 3000
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+
+    MediaBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref MediaBucket
+        PolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action: s3:GetObject
+              Resource: !Sub 'arn:aws:s3:::${self:custom.s3Bucket}/*'
+
+plugins: []
+
+package:
+  individually: false
+  patterns:
+    - 'dist/**'
+    - 'node_modules/**'
+    - '!node_modules/.cache/**'
+    - '!node_modules/typescript/**'
+    - '!node_modules/serverless/**'
+    - '!src/**'
+    - '!frontend/**'
+    - '!coverage/**'
+    - '!data/**'
+    - '!uploads/**'
+    - '!*.md'
+    - '!handlers/**'
+    - '!services/**'
+    - '!utils/**'

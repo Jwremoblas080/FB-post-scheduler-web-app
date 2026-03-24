@@ -1,0 +1,32 @@
+{
+  "name": "fb-post-scheduler-lambda",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "tsc && serverless deploy",
+    "deploy:prod": "tsc && serverless deploy --stage prod",
+    "remove": "serverless remove",
+    "logs:api": "serverless logs -f api --tail",
+    "logs:scheduler": "serverless logs -f scheduler --tail"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0",
+    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "serverless-http": "^3.2.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.0",
+    "serverless": "^3.0.0",
+    "typescript": "^5.3.3"
+  }
+}
