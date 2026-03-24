@@ -1,0 +1,8 @@
+{
+  "databasePath": "./data/scheduler.db",
+  "uploadDirectory": "./uploads",
+  "facebookAppId": "your-facebook-app-id",
+  "facebookAppSecret": "your-facebook-app-secret",
+  "schedulerInterval": 60,
+  "maxFileSize": 104857600
+}
