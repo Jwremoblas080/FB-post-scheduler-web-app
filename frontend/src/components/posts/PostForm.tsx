@@ -166,7 +166,14 @@ export default function PostForm({ onSuccess, onError }: PostFormProps) {
       <div className="field">
         <label htmlFor="caption">Caption</label>
         <textarea id="caption" value={caption} onChange={e => setCaption(e.target.value)} placeholder="Write your post caption…" rows={3} />
-        {errors.caption && <span className="field-error">{errors.caption}</span>}
+        <div className="caption-counter-row">
+          {errors.caption
+            ? <span className="field-error">{errors.caption}</span>
+            : <span />}
+          <span className={`caption-counter${caption.length > 63206 ? ' caption-counter-over' : caption.length > 280 ? ' caption-counter-warn' : ''}`}>
+            {caption.length} / 63,206
+          </span>
+        </div>
       </div>
 
       {/* Media type */}

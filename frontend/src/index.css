@@ -717,3 +717,68 @@ select {
   font-size: 28px;
   opacity: 0.6;
 }
+
+/* ── Feature 5: Caption counter ─────────────────────────────────────────── */
+.caption-counter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  min-height: 18px;
+}
+
+.caption-counter {
+  font-size: 11px;
+  color: var(--text-light);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.caption-counter-warn { color: var(--warning-text); }
+.caption-counter-over { color: var(--danger); font-weight: 600; }
+
+/* ── Feature 6: Relative time ───────────────────────────────────────────── */
+.post-time-relative {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-light);
+  background: var(--bg);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* ── Feature 7: Stats row ───────────────────────────────────────────────── */
+.stats-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.stats-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.stats-chip:hover,
+.stats-chip.active { background: var(--bg); color: var(--text); border-color: var(--text-muted); }
+
+.stats-chip-pending.active { background: var(--warning-bg); color: var(--warning-text); border-color: #fde68a; }
+.stats-chip-posted.active  { background: var(--success-bg); color: var(--success-text); border-color: #bbf7d0; }
+.stats-chip-failed.active  { background: var(--danger-bg);  color: var(--danger-text);  border-color: var(--danger-border); }
+
+/* ── Feature 10: Empty state ────────────────────────────────────────────── */
+.empty-state-icon  { font-size: 36px; margin-bottom: 10px; opacity: 0.7; }
+.empty-state-title { font-size: 15px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+.empty-state-hint  { font-size: 13px; color: var(--text-light); }
