@@ -124,7 +124,10 @@ function HomePage() {
         {isConnected && (
           <div className="card">
             <p className="section-label">Scheduled</p>
-            <PostList refreshKey={refreshKey} />
+            <PostList
+              refreshKey={refreshKey}
+              onStatusChange={(msg, type) => showToast(type, msg)}
+            />
           </div>
         )}
       </main>

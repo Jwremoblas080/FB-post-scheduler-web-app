@@ -1015,3 +1015,89 @@ select {
 
   .btn { padding: 8px 12px; font-size: 13px; }
 }
+
+/* ── Real-time publishing states ────────────────────────────────────────── */
+
+/* Top banner when posts are actively publishing */
+.publishing-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(79, 142, 247, 0.08);
+  border: 1px solid rgba(79, 142, 247, 0.25);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--primary);
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+.publishing-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(79, 142, 247, 0.3);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+/* Post card highlight when publishing */
+.post-card-publishing {
+  border-color: rgba(79, 142, 247, 0.4);
+  background: rgba(79, 142, 247, 0.03);
+  animation: publishingPulse 2s ease-in-out infinite;
+}
+
+@keyframes publishingPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79, 142, 247, 0); }
+  50%       { box-shadow: 0 0 0 4px rgba(79, 142, 247, 0.12); }
+}
+
+/* Thumbnail pulse overlay */
+.post-thumb {
+  position: relative;
+}
+
+.post-thumb-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sm);
+  background: rgba(79, 142, 247, 0.15);
+  animation: thumbPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes thumbPulse {
+  0%, 100% { opacity: 0; }
+  50%       { opacity: 1; }
+}
+
+/* Publishing badge */
+.badge-publishing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(79, 142, 247, 0.1);
+  color: var(--primary);
+  border: 1px solid rgba(79, 142, 247, 0.3);
+}
+
+.badge-dot-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: dotPulse 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}

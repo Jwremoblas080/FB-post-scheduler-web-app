@@ -17,13 +17,21 @@ interface Post {
 
 type StatusFilter = 'all' | 'pending' | 'posted' | 'failed';
 type SortDir = 'asc' | 'desc';
-interface PostListProps { refreshKey?: number; }
+interface PostListProps {
+  refreshKey?: number;
+  onStatusChange?: (msg: string, type: 'success' | 'error') => void;
+}
 
 const BADGE: Record<Post['status'], string> = {
   pending: 'badge badge-pending',
   posted:  'badge badge-posted',
   failed:  'badge badge-failed',
 };
+
+// A post is "publishing" when it's pending but its scheduled time has passed
+function isPublishing(post: Post): boolean {
+  return post.status === 'pending' && new Date(post.scheduledTime) <= new Date();
+}
 
 function parseMediaPaths(mediaUrls: string | string[]): string[] {
   if (Array.isArray(mediaUrls)) return mediaUrls;
@@ -37,7 +45,6 @@ function formatDateTime(iso: string): string {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-// Feature 6 — relative time without date-fns
 function formatRelative(iso: string): string {
   const diff = new Date(iso).getTime() - Date.now();
   const abs = Math.abs(diff);
@@ -46,10 +53,10 @@ function formatRelative(iso: string): string {
   const hours = Math.floor(abs / 3_600_000);
   const days  = Math.floor(abs / 86_400_000);
   let label: string;
-  if (mins < 1)       label = 'just now';
-  else if (mins < 60) label = `${mins}m`;
+  if (mins < 1)        label = 'just now';
+  else if (mins < 60)  label = `${mins}m`;
   else if (hours < 24) label = `${hours}h`;
-  else                label = `${days}d`;
+  else                 label = `${days}d`;
   if (label === 'just now') return label;
   return past ? `${label} ago` : `in ${label}`;
 }
@@ -117,9 +124,10 @@ function EditModal({ post, onSave, onClose }: EditModalProps) {
 
 // ─── PostList ─────────────────────────────────────────────────────────────────
 
-const POLL_INTERVAL = 30_000;
+const POLL_IDLE    = 30_000; // 30s when nothing is publishing
+const POLL_ACTIVE  =  5_000; // 5s when posts are in "publishing" window
 
-export default function PostList({ refreshKey = 0 }: PostListProps) {
+export default function PostList({ refreshKey = 0, onStatusChange }: PostListProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -127,9 +135,11 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [confirmPost, setConfirmPost] = useState<Post | null>(null);
   const [editPost, setEditPost] = useState<Post | null>(null);
-  // Feature 8 — filter + sort
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  // Track previous statuses to detect transitions
+  const prevStatusMap = useRef<Map<string, Post['status']>>(new Map());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchPosts = useCallback(async (silent = false) => {
@@ -137,20 +147,47 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
     setError('');
     try {
       const res = await apiClient.get<{ posts: Post[] }>('/posts');
-      setPosts(res.data.posts);
+      const incoming = res.data.posts;
+
+      // Detect status transitions and fire notifications
+      incoming.forEach(post => {
+        const prev = prevStatusMap.current.get(post.id);
+        if (prev && prev !== post.status) {
+          if (post.status === 'posted') {
+            onStatusChange?.(`✅ Posted: "${post.caption.slice(0, 40)}${post.caption.length > 40 ? '…' : ''}"`, 'success');
+          } else if (post.status === 'failed') {
+            onStatusChange?.(`❌ Failed: "${post.caption.slice(0, 40)}${post.caption.length > 40 ? '…' : ''}"`, 'error');
+          }
+        }
+        prevStatusMap.current.set(post.id, post.status);
+      });
+
+      setPosts(incoming);
     } catch {
       setError('Failed to load posts. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onStatusChange]);
 
+  // Initial load
   useEffect(() => { fetchPosts(); }, [fetchPosts, refreshKey]);
 
+  // Smart polling — fast when any post is in publishing window, slow otherwise
   useEffect(() => {
-    pollRef.current = setInterval(() => fetchPosts(true), POLL_INTERVAL);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [fetchPosts]);
+    function scheduleNext() {
+      const hasPublishing = posts.some(isPublishing);
+      const interval = hasPublishing ? POLL_ACTIVE : POLL_IDLE;
+
+      pollRef.current = setTimeout(async () => {
+        await fetchPosts(true);
+        scheduleNext();
+      }, interval);
+    }
+
+    scheduleNext();
+    return () => { if (pollRef.current) clearTimeout(pollRef.current); };
+  }, [posts, fetchPosts]);
 
   async function handleDelete(postId: string) {
     setConfirmPost(null);
@@ -158,6 +195,7 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
     try {
       await apiClient.delete(`/posts/${postId}`);
       setPosts(prev => prev.filter(p => p.id !== postId));
+      prevStatusMap.current.delete(postId);
     } catch {
       setError('Failed to delete post.');
     } finally {
@@ -182,14 +220,13 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, caption, scheduledTime } : p));
   }
 
-  // Feature 7 — stats
   const stats = {
-    pending: posts.filter(p => p.status === 'pending').length,
-    posted:  posts.filter(p => p.status === 'posted').length,
-    failed:  posts.filter(p => p.status === 'failed').length,
+    pending:    posts.filter(p => p.status === 'pending').length,
+    posted:     posts.filter(p => p.status === 'posted').length,
+    failed:     posts.filter(p => p.status === 'failed').length,
+    publishing: posts.filter(isPublishing).length,
   };
 
-  // Feature 8 — filter + sort applied
   const visible = posts
     .filter(p => statusFilter === 'all' || p.status === statusFilter)
     .sort((a, b) => {
@@ -214,13 +251,18 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
         <EditModal post={editPost} onSave={handleEdit} onClose={() => setEditPost(null)} />
       )}
 
-      {/* Feature 7 — stats summary */}
+      {/* Publishing banner — shown when posts are actively being published */}
+      {stats.publishing > 0 && (
+        <div className="publishing-banner">
+          <span className="publishing-spinner" />
+          Publishing {stats.publishing} post{stats.publishing > 1 ? 's' : ''}… checking every 5s
+        </div>
+      )}
+
+      {/* Stats row */}
       {posts.length > 0 && (
         <div className="stats-row">
-          <button
-            className={`stats-chip${statusFilter === 'all' ? ' active' : ''}`}
-            onClick={() => setStatusFilter('all')}
-          >
+          <button className={`stats-chip${statusFilter === 'all' ? ' active' : ''}`} onClick={() => setStatusFilter('all')}>
             {posts.length} total
           </button>
           <button
@@ -243,23 +285,15 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
               {stats.failed} failed
             </button>
           )}
-          {/* Feature 8 — sort + refresh */}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-              title="Toggle sort order"
-            >
+            <button className="btn btn-ghost btn-sm" onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} title="Toggle sort">
               {sortDir === 'asc' ? '↑ Oldest' : '↓ Newest'}
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => fetchPosts(true)} title="Refresh">
-              ↻
-            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => fetchPosts(true)} title="Refresh">↻</button>
           </div>
         </div>
       )}
 
-      {/* Feature 10 — empty state with CTA */}
       {posts.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">📅</div>
@@ -269,21 +303,20 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
       ) : visible.length === 0 ? (
         <div className="empty-state">
           <p style={{ fontSize: 13 }}>No {statusFilter} posts.</p>
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setStatusFilter('all')}>
-            Show all
-          </button>
+          <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setStatusFilter('all')}>Show all</button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {visible.map(post => {
             const paths = parseMediaPaths(post.mediaUrls);
             const firstPath = paths[0];
-            const canEdit   = post.status === 'pending';
-            const canDelete = post.status === 'pending' || post.status === 'failed';
-            const canRetry  = post.status === 'failed';
+            const publishing = isPublishing(post);
+            const canEdit    = post.status === 'pending' && !publishing;
+            const canDelete  = post.status === 'pending' || post.status === 'failed';
+            const canRetry   = post.status === 'failed';
 
             return (
-              <div key={post.id} className="post-card">
+              <div key={post.id} className={`post-card${publishing ? ' post-card-publishing' : ''}`}>
                 {/* Thumbnail */}
                 <div className="post-thumb">
                   {post.mediaType === 'video' ? (
@@ -291,17 +324,24 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
                   ) : (
                     <img src={firstPath?.startsWith('http') ? firstPath : `/${firstPath?.replace(/^\//, '')}`} alt="thumbnail" />
                   )}
+                  {publishing && <div className="post-thumb-pulse" />}
                 </div>
 
                 {/* Details */}
                 <div className="post-body">
                   <div className="post-meta">
-                    <span className={BADGE[post.status]}>{post.status}</span>
+                    {publishing ? (
+                      <span className="badge badge-publishing">
+                        <span className="badge-dot-pulse" />
+                        Publishing…
+                      </span>
+                    ) : (
+                      <span className={BADGE[post.status]}>{post.status}</span>
+                    )}
                     {post.pageName && <span className="post-page">{post.pageName}</span>}
                     {paths.length > 1 && <span style={{ fontSize: 11, color: 'var(--text-light)' }}>+{paths.length - 1} more</span>}
                   </div>
                   <p className="post-caption">{post.caption}</p>
-                  {/* Feature 6 — relative + absolute time */}
                   <p className="post-time">
                     {formatDateTime(post.scheduledTime)}
                     <span className="post-time-relative">{formatRelative(post.scheduledTime)}</span>
@@ -317,20 +357,12 @@ export default function PostList({ refreshKey = 0 }: PostListProps) {
                     <button className="btn btn-ghost btn-sm" onClick={() => setEditPost(post)}>Edit</button>
                   )}
                   {canRetry && (
-                    <button
-                      className="btn btn-warning btn-sm"
-                      onClick={() => handleRetry(post.id)}
-                      disabled={retryingId === post.id}
-                    >
+                    <button className="btn btn-warning btn-sm" onClick={() => handleRetry(post.id)} disabled={retryingId === post.id}>
                       {retryingId === post.id ? '…' : 'Retry'}
                     </button>
                   )}
-                  {canDelete && (
-                    <button
-                      className="btn btn-danger-ghost btn-sm"
-                      onClick={() => setConfirmPost(post)}
-                      disabled={deletingId === post.id}
-                    >
+                  {canDelete && !publishing && (
+                    <button className="btn btn-danger-ghost btn-sm" onClick={() => setConfirmPost(post)} disabled={deletingId === post.id}>
                       {deletingId === post.id ? '…' : 'Delete'}
                     </button>
                   )}
