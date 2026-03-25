@@ -1,13 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '../../api/client';
-import type { CloneData } from '../../App';
 
 interface Page { id: string; name: string; }
 interface PostFormProps {
   onSuccess?: () => void;
   onError?: (msg: string) => void;
-  cloneData?: CloneData | null;
-  onCloneConsumed?: () => void;
 }
 interface FormErrors {
   caption?: string; media?: string; scheduledTime?: string; pageId?: string; submit?: string;
@@ -55,7 +52,7 @@ function getQuickPicks(): { label: string; value: string }[] {
   return picks;
 }
 
-export default function PostForm({ onSuccess, onError, cloneData, onCloneConsumed }: PostFormProps) {
+export default function PostForm({ onSuccess, onError }: PostFormProps) {
   const [pages, setPages] = useState<Page[]>([]);
   const [pagesError, setPagesError] = useState('');
   const [mediaType, setMediaType] = useState<'images' | 'video'>('images');
@@ -70,19 +67,6 @@ export default function PostForm({ onSuccess, onError, cloneData, onCloneConsume
   const [submitting, setSubmitting] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
-
-  // Feature 13 — apply clone data when it arrives
-  useEffect(() => {
-    if (!cloneData) return;
-    setCaption(cloneData.caption);
-    setMediaType(cloneData.mediaType);
-    // Clear existing media — user needs to re-upload (files can't be cloned from URLs)
-    setImageFiles([]); setImagePreviews([]);
-    setVideoFile(null); setVideoPreview('');
-    setScheduledTime(''); // force user to pick a new time
-    setErrors({});
-    onCloneConsumed?.();
-  }, [cloneData]); // eslint-disable-line
 
   useEffect(() => {
     apiClient.get<{ pages: Page[]; hint?: string }>('/auth/pages')

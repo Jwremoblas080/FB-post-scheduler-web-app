@@ -10,25 +10,14 @@ import apiClient from './api/client';
 
 interface ToastState { type: 'success' | 'error'; message: string; detail?: string; }
 
-// Feature 11 — persist theme preference
 function getInitialTheme(): 'light' | 'dark' | 'system' {
   return (localStorage.getItem('theme') as 'light' | 'dark' | 'system') || 'system';
 }
 
 function applyTheme(theme: 'light' | 'dark' | 'system') {
   const root = document.documentElement;
-  if (theme === 'system') {
-    root.removeAttribute('data-theme');
-  } else {
-    root.setAttribute('data-theme', theme);
-  }
-}
-
-// Feature 13 — clone data passed from PostList to PostForm
-export interface CloneData {
-  caption: string;
-  mediaType: 'images' | 'video';
-  mediaUrls: string[];
+  if (theme === 'system') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', theme);
 }
 
 function HomePage() {
@@ -38,8 +27,6 @@ function HomePage() {
   const [isConnected, setIsConnected] = useState(localStorage.getItem('fb_connected') === 'true');
   const [disconnecting, setDisconnecting] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(getInitialTheme);
-  const [cloneData, setCloneData] = useState<CloneData | null>(null);
-  const formRef = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     applyTheme(theme);
@@ -74,12 +61,6 @@ function HomePage() {
     }
   }
 
-  function handleClone(data: CloneData) {
-    setCloneData(data);
-    // Scroll to form
-    document.getElementById('new-post-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
   function cycleTheme() {
     setTheme(t => t === 'system' ? 'light' : t === 'light' ? 'dark' : 'system');
   }
@@ -92,24 +73,17 @@ function HomePage() {
       <header className="app-header">
         <div className="app-header-logo">F</div>
         <span className="app-header-title">Post Scheduler</span>
-
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Feature 11 — theme toggle */}
           <button className="theme-toggle" onClick={cycleTheme} title={themeTitle} aria-label={themeTitle}>
             {themeIcon}
           </button>
-
           {isConnected && (
             <>
               <span className="connected-badge">
                 <span className="connected-dot" />
                 <span className="connected-badge-text">Connected to Facebook</span>
               </span>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={handleDisconnect}
-                disabled={disconnecting}
-              >
+              <button className="btn btn-ghost btn-sm" onClick={handleDisconnect} disabled={disconnecting}>
                 {disconnecting ? '…' : 'Disconnect'}
               </button>
             </>
@@ -118,7 +92,6 @@ function HomePage() {
       </header>
 
       <main className="app-main">
-        {/* Account */}
         <div className="card">
           <p className="section-label">Account</p>
           <div className="login-section">
@@ -127,16 +100,12 @@ function HomePage() {
           </div>
         </div>
 
-        {/* Create post */}
         {isConnected ? (
-          <div className="card" id="new-post-card" ref={el => { formRef[1](el); }}>
+          <div className="card" id="new-post-card">
             <p className="section-label">New Post</p>
             <PostForm
-              cloneData={cloneData}
-              onCloneConsumed={() => setCloneData(null)}
               onSuccess={() => {
                 setRefreshKey(k => k + 1);
-                setCloneData(null);
                 showToast('success', 'Post scheduled!', 'Your post has been added to the queue.');
               }}
               onError={(msg) => showToast('error', 'Failed to schedule post', msg)}
@@ -152,11 +121,10 @@ function HomePage() {
           </div>
         )}
 
-        {/* Post list */}
         {isConnected && (
           <div className="card">
             <p className="section-label">Scheduled</p>
-            <PostList refreshKey={refreshKey} onClone={handleClone} />
+            <PostList refreshKey={refreshKey} />
           </div>
         )}
       </main>

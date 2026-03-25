@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../../api/client';
 import ConfirmModal from '../common/ConfirmModal';
-import type { CloneData } from '../../App';
 
 interface Post {
   id: string;
@@ -18,7 +17,7 @@ interface Post {
 
 type StatusFilter = 'all' | 'pending' | 'posted' | 'failed';
 type SortDir = 'asc' | 'desc';
-interface PostListProps { refreshKey?: number; onClone?: (data: CloneData) => void; }
+interface PostListProps { refreshKey?: number; }
 
 const BADGE: Record<Post['status'], string> = {
   pending: 'badge badge-pending',
@@ -120,7 +119,7 @@ function EditModal({ post, onSave, onClose }: EditModalProps) {
 
 const POLL_INTERVAL = 30_000;
 
-export default function PostList({ refreshKey = 0, onClone }: PostListProps) {
+export default function PostList({ refreshKey = 0 }: PostListProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -317,13 +316,6 @@ export default function PostList({ refreshKey = 0, onClone }: PostListProps) {
                   {canEdit && (
                     <button className="btn btn-ghost btn-sm" onClick={() => setEditPost(post)}>Edit</button>
                   )}
-                  <button
-                    className="btn btn-clone btn-sm"
-                    onClick={() => onClone?.({ caption: post.caption, mediaType: post.mediaType === 'image' ? 'images' : 'video', mediaUrls: parseMediaPaths(post.mediaUrls) })}
-                    title="Clone this post"
-                  >
-                    Clone
-                  </button>
                   {canRetry && (
                     <button
                       className="btn btn-warning btn-sm"
