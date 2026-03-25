@@ -36,6 +36,7 @@ export class AuthService {
       redirect_uri: this.redirectUri,
       scope,
       response_type: 'code',
+      auth_type: 'reauthenticate',  // always show full FB login, never the "Reconnect" shortcut
       ...(state ? { state } : {}),
     });
     return `https://www.facebook.com/v18.0/dialog/oauth?${params}`;
