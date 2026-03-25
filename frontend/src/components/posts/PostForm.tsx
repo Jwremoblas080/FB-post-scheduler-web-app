@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '../../api/client';
+import type { CloneData } from '../../App';
 
 interface Page { id: string; name: string; }
-interface PostFormProps { onSuccess?: () => void; onError?: (msg: string) => void; }
+interface PostFormProps {
+  onSuccess?: () => void;
+  onError?: (msg: string) => void;
+  cloneData?: CloneData | null;
+  onCloneConsumed?: () => void;
+}
 interface FormErrors {
   caption?: string; media?: string; scheduledTime?: string; pageId?: string; submit?: string;
 }
@@ -13,7 +19,43 @@ const MAX_IMAGE_SIZE = 4 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 const MAX_IMAGES = 10;
 
-export default function PostForm({ onSuccess, onError }: PostFormProps) {
+// Feature 14 — quick-pick helpers
+function getQuickPicks(): { label: string; value: string }[] {
+  const now = new Date();
+  const picks: { label: string; value: string }[] = [];
+
+  function fmt(d: Date) {
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+
+  // Tomorrow 9am
+  const tom9 = new Date(now); tom9.setDate(tom9.getDate() + 1); tom9.setHours(9, 0, 0, 0);
+  picks.push({ label: 'Tomorrow 9am', value: fmt(tom9) });
+
+  // Tomorrow 12pm
+  const tom12 = new Date(now); tom12.setDate(tom12.getDate() + 1); tom12.setHours(12, 0, 0, 0);
+  picks.push({ label: 'Tomorrow 12pm', value: fmt(tom12) });
+
+  // Tomorrow 6pm
+  const tom18 = new Date(now); tom18.setDate(tom18.getDate() + 1); tom18.setHours(18, 0, 0, 0);
+  picks.push({ label: 'Tomorrow 6pm', value: fmt(tom18) });
+
+  // Next Monday 10am
+  const mon = new Date(now);
+  const daysUntilMon = (8 - mon.getDay()) % 7 || 7;
+  mon.setDate(mon.getDate() + daysUntilMon); mon.setHours(10, 0, 0, 0);
+  picks.push({ label: 'Mon 10am', value: fmt(mon) });
+
+  // Next weekend Saturday 11am
+  const sat = new Date(now);
+  const daysUntilSat = (6 - sat.getDay() + 7) % 7 || 7;
+  sat.setDate(sat.getDate() + daysUntilSat); sat.setHours(11, 0, 0, 0);
+  picks.push({ label: 'Sat 11am', value: fmt(sat) });
+
+  return picks;
+}
+
+export default function PostForm({ onSuccess, onError, cloneData, onCloneConsumed }: PostFormProps) {
   const [pages, setPages] = useState<Page[]>([]);
   const [pagesError, setPagesError] = useState('');
   const [mediaType, setMediaType] = useState<'images' | 'video'>('images');
@@ -29,13 +71,26 @@ export default function PostForm({ onSuccess, onError }: PostFormProps) {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
+  // Feature 13 — apply clone data when it arrives
+  useEffect(() => {
+    if (!cloneData) return;
+    setCaption(cloneData.caption);
+    setMediaType(cloneData.mediaType);
+    // Clear existing media — user needs to re-upload (files can't be cloned from URLs)
+    setImageFiles([]); setImagePreviews([]);
+    setVideoFile(null); setVideoPreview('');
+    setScheduledTime(''); // force user to pick a new time
+    setErrors({});
+    onCloneConsumed?.();
+  }, [cloneData]); // eslint-disable-line
+
   useEffect(() => {
     apiClient.get<{ pages: Page[]; hint?: string }>('/auth/pages')
       .then(res => {
         if (res.data.pages.length === 0 && res.data.hint) {
           setPagesError('Pages not loaded. Please click "Connect with Facebook" again to refresh.');
         } else {
-        setPages(res.data.pages.filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i));
+          setPages(res.data.pages.filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i));
         }
       })
       .catch((err) => {
@@ -127,17 +182,20 @@ export default function PostForm({ onSuccess, onError }: PostFormProps) {
         const res = await apiClient.post<{ filePath: string }>('/upload/video', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
         mediaPaths = [res.data.filePath];
       }
-      await apiClient.post('/posts', { caption, mediaType: mediaType === 'images' ? 'image' : 'video', mediaPaths, scheduledTime: new Date(scheduledTime).toISOString(), pageId });
+      await apiClient.post('/posts', {
+        caption,
+        mediaType: mediaType === 'images' ? 'image' : 'video',
+        mediaPaths,
+        scheduledTime: new Date(scheduledTime).toISOString(),
+        pageId,
+      });
       setCaption(''); setScheduledTime(''); setPageId('');
       setImageFiles([]); setImagePreviews([]);
       setVideoFile(null); setVideoPreview('');
       onSuccess?.();
     } catch (err: unknown) {
       const response = (err as { response?: { data?: { message?: string; error?: string } } })?.response;
-      const message = response?.data?.message
-        || response?.data?.error
-        || (err as Error)?.message
-        || 'Failed to create post.';
+      const message = response?.data?.message || response?.data?.error || (err as Error)?.message || 'Failed to create post.';
       console.error('Post creation error:', err);
       setErrors({ submit: message });
       onError?.(message);
@@ -146,10 +204,19 @@ export default function PostForm({ onSuccess, onError }: PostFormProps) {
     }
   }
 
+  // Feature 12 — Ctrl+Enter to submit
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit(e as unknown as React.FormEvent);
+    }
+  }
+
   const minDateTime = new Date(Date.now() + 60_000).toISOString().slice(0, 16);
+  const quickPicks = getQuickPicks();
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
       {/* Page */}
       <div className="field">
@@ -165,11 +232,15 @@ export default function PostForm({ onSuccess, onError }: PostFormProps) {
       {/* Caption */}
       <div className="field">
         <label htmlFor="caption">Caption</label>
-        <textarea id="caption" value={caption} onChange={e => setCaption(e.target.value)} placeholder="Write your post caption…" rows={3} />
+        <textarea
+          id="caption"
+          value={caption}
+          onChange={e => setCaption(e.target.value)}
+          placeholder="Write your post caption… (Ctrl+Enter to submit)"
+          rows={3}
+        />
         <div className="caption-counter-row">
-          {errors.caption
-            ? <span className="field-error">{errors.caption}</span>
-            : <span />}
+          {errors.caption ? <span className="field-error">{errors.caption}</span> : <span />}
           <span className={`caption-counter${caption.length > 63206 ? ' caption-counter-over' : caption.length > 280 ? ' caption-counter-warn' : ''}`}>
             {caption.length} / 63,206
           </span>
@@ -228,10 +299,28 @@ export default function PostForm({ onSuccess, onError }: PostFormProps) {
         </div>
       )}
 
-      {/* Scheduled time */}
+      {/* Scheduled time + Feature 14 quick picks */}
       <div className="field">
         <label htmlFor="scheduledTime">Schedule for</label>
-        <input id="scheduledTime" type="datetime-local" value={scheduledTime} min={minDateTime} onChange={e => setScheduledTime(e.target.value)} />
+        <input
+          id="scheduledTime"
+          type="datetime-local"
+          value={scheduledTime}
+          min={minDateTime}
+          onChange={e => setScheduledTime(e.target.value)}
+        />
+        <div className="quick-picks">
+          {quickPicks.map(p => (
+            <button
+              key={p.label}
+              type="button"
+              className="quick-pick-btn"
+              onClick={() => setScheduledTime(p.value)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
         {errors.scheduledTime && <span className="field-error">{errors.scheduledTime}</span>}
       </div>
 
@@ -241,6 +330,7 @@ export default function PostForm({ onSuccess, onError }: PostFormProps) {
 
       <button type="submit" disabled={submitting} className="btn btn-primary btn-full" style={{ marginTop: 20 }}>
         {submitting ? 'Scheduling…' : 'Schedule Post'}
+        {!submitting && <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>Ctrl+↵</span>}
       </button>
     </form>
   );

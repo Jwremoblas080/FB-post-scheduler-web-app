@@ -10,12 +10,41 @@ import apiClient from './api/client';
 
 interface ToastState { type: 'success' | 'error'; message: string; detail?: string; }
 
+// Feature 11 — persist theme preference
+function getInitialTheme(): 'light' | 'dark' | 'system' {
+  return (localStorage.getItem('theme') as 'light' | 'dark' | 'system') || 'system';
+}
+
+function applyTheme(theme: 'light' | 'dark' | 'system') {
+  const root = document.documentElement;
+  if (theme === 'system') {
+    root.removeAttribute('data-theme');
+  } else {
+    root.setAttribute('data-theme', theme);
+  }
+}
+
+// Feature 13 — clone data passed from PostList to PostForm
+export interface CloneData {
+  caption: string;
+  mediaType: 'images' | 'video';
+  mediaUrls: string[];
+}
+
 function HomePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isConnected, setIsConnected] = useState(localStorage.getItem('fb_connected') === 'true');
   const [disconnecting, setDisconnecting] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(getInitialTheme);
+  const [cloneData, setCloneData] = useState<CloneData | null>(null);
+  const formRef = useState<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    applyTheme(theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     function syncConnected() {
@@ -45,26 +74,47 @@ function HomePage() {
     }
   }
 
+  function handleClone(data: CloneData) {
+    setCloneData(data);
+    // Scroll to form
+    document.getElementById('new-post-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function cycleTheme() {
+    setTheme(t => t === 'system' ? 'light' : t === 'light' ? 'dark' : 'system');
+  }
+
+  const themeIcon = theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : '💻';
+  const themeTitle = `Theme: ${theme} (click to cycle)`;
+
   return (
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-logo">F</div>
         <span className="app-header-title">Post Scheduler</span>
-        {isConnected && (
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="connected-badge">
-              <span className="connected-dot" />
-              Connected to Facebook
-            </span>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-            >
-              {disconnecting ? 'Disconnecting…' : 'Disconnect'}
-            </button>
-          </div>
-        )}
+
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Feature 11 — theme toggle */}
+          <button className="theme-toggle" onClick={cycleTheme} title={themeTitle} aria-label={themeTitle}>
+            {themeIcon}
+          </button>
+
+          {isConnected && (
+            <>
+              <span className="connected-badge">
+                <span className="connected-dot" />
+                <span className="connected-badge-text">Connected to Facebook</span>
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+              >
+                {disconnecting ? '…' : 'Disconnect'}
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
       <main className="app-main">
@@ -72,20 +122,21 @@ function HomePage() {
         <div className="card">
           <p className="section-label">Account</p>
           <div className="login-section">
-            <LoginButton
-              onError={setLoginError}
-            />
+            <LoginButton onError={setLoginError} />
             {loginError && <ErrorMessage error={loginError} onDismiss={() => setLoginError(null)} />}
           </div>
         </div>
 
-        {/* Create post — only shown when connected */}
+        {/* Create post */}
         {isConnected ? (
-          <div className="card">
+          <div className="card" id="new-post-card" ref={el => { formRef[1](el); }}>
             <p className="section-label">New Post</p>
             <PostForm
+              cloneData={cloneData}
+              onCloneConsumed={() => setCloneData(null)}
               onSuccess={() => {
                 setRefreshKey(k => k + 1);
+                setCloneData(null);
                 showToast('success', 'Post scheduled!', 'Your post has been added to the queue.');
               }}
               onError={(msg) => showToast('error', 'Failed to schedule post', msg)}
@@ -101,11 +152,11 @@ function HomePage() {
           </div>
         )}
 
-        {/* Post list — only shown when connected */}
+        {/* Post list */}
         {isConnected && (
           <div className="card">
             <p className="section-label">Scheduled</p>
-            <PostList refreshKey={refreshKey} />
+            <PostList refreshKey={refreshKey} onClone={handleClone} />
           </div>
         )}
       </main>

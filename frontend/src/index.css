@@ -27,6 +27,75 @@
   --font: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+/* ── Feature 11: Dark mode ──────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --border-focus: #4f8ef7;
+    --text: #e8eaf0;
+    --text-muted: #8b92a8;
+    --text-light: #555c72;
+    --primary: #4f8ef7;
+    --primary-hover: #3b7de8;
+    --primary-text: #ffffff;
+    --danger: #f87171;
+    --danger-bg: #2d1515;
+    --danger-border: #5c2020;
+    --danger-text: #fca5a5;
+    --success-bg: #0d2318;
+    --success-text: #86efac;
+    --warning-bg: #2a1f08;
+    --warning-text: #fcd34d;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+    --shadow: 0 4px 16px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3);
+  }
+}
+
+/* Manual dark mode toggle class (overrides media query) */
+[data-theme="dark"] {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --border: #2a2d3a;
+  --border-focus: #4f8ef7;
+  --text: #e8eaf0;
+  --text-muted: #8b92a8;
+  --text-light: #555c72;
+  --primary: #4f8ef7;
+  --primary-hover: #3b7de8;
+  --primary-text: #ffffff;
+  --danger: #f87171;
+  --danger-bg: #2d1515;
+  --danger-border: #5c2020;
+  --danger-text: #fca5a5;
+  --success-bg: #0d2318;
+  --success-text: #86efac;
+  --warning-bg: #2a1f08;
+  --warning-text: #fcd34d;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow: 0 4px 16px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3);
+}
+
+[data-theme="light"] {
+  --bg: #f8f9fb;
+  --surface: #ffffff;
+  --border: #e8eaed;
+  --text: #1a1d23;
+  --text-muted: #6b7280;
+  --text-light: #9ca3af;
+  --danger: #ef4444;
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --danger-text: #991b1b;
+  --success-bg: #f0fdf4;
+  --success-text: #166534;
+  --warning-bg: #fffbeb;
+  --warning-text: #92400e;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 4px 16px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04);
+}
+
 html, body, #root {
   height: 100%;
 }
@@ -782,3 +851,167 @@ select {
 .empty-state-icon  { font-size: 36px; margin-bottom: 10px; opacity: 0.7; }
 .empty-state-title { font-size: 15px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
 .empty-state-hint  { font-size: 13px; color: var(--text-light); }
+
+/* ── Feature 14: Quick-pick time buttons ────────────────────────────────── */
+.quick-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.quick-pick-btn {
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.quick-pick-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(79,142,247,0.06);
+}
+
+/* ── Feature 11: Dark mode toggle button ────────────────────────────────── */
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 15px;
+  color: var(--text-muted);
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  background: var(--bg);
+  border-color: var(--text-muted);
+}
+
+/* ── Feature 13: Clone button ───────────────────────────────────────────── */
+.btn-clone {
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.btn-clone:not(:disabled):hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* ── Feature 15: Mobile responsiveness ─────────────────────────────────── */
+@media (max-width: 600px) {
+  .app-header {
+    padding: 0 16px;
+    gap: 8px;
+  }
+
+  .app-header-title {
+    font-size: 14px;
+  }
+
+  /* Hide "Connected to Facebook" text on mobile, keep dot + disconnect */
+  .connected-badge-text {
+    display: none;
+  }
+
+  .connected-badge {
+    padding: 4px 8px;
+  }
+
+  .app-main {
+    padding: 16px 12px 48px;
+    gap: 16px;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: var(--radius);
+  }
+
+  /* Post cards stack vertically on mobile */
+  .post-card {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .post-thumb {
+    width: 48px;
+    height: 48px;
+  }
+
+  .post-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .post-actions {
+    flex-direction: row;
+    width: 100%;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    margin-top: 2px;
+  }
+
+  /* Stats row wraps nicely */
+  .stats-row {
+    gap: 4px;
+  }
+
+  .stats-chip {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  /* Quick picks wrap on mobile */
+  .quick-picks {
+    gap: 4px;
+  }
+
+  /* Modal full-width on mobile */
+  .modal, .modal-wide {
+    max-width: 100%;
+    padding: 24px 16px 20px;
+  }
+
+  /* Form fields full width */
+  .media-toggle {
+    gap: 6px;
+  }
+
+  /* Preview grid smaller on mobile */
+  .preview-item {
+    width: 60px;
+    height: 60px;
+  }
+
+  /* Post time wraps */
+  .post-time {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .app-header-title { display: none; }
+
+  .btn { padding: 8px 12px; font-size: 13px; }
+}
