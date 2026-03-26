@@ -12,7 +12,7 @@ interface FormErrors {
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
-const MAX_IMAGE_SIZE = 4 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 const MAX_IMAGES = 10;
 
@@ -250,7 +250,7 @@ export default function PostForm({ onSuccess, onError }: PostFormProps) {
           <div className="upload-zone">
             <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple onChange={handleImageChange} />
             <p className="upload-zone-text">Click or drag images here</p>
-            <p className="upload-zone-hint">JPEG, PNG, GIF, WebP · max 4 MB each · up to {MAX_IMAGES}</p>
+            <p className="upload-zone-hint">JPEG, PNG, GIF, WebP · max 20 MB each · up to {MAX_IMAGES}</p>
           </div>
           {imagePreviews.length > 0 && (
             <div className="preview-grid">

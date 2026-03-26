@@ -7,7 +7,8 @@ const BUCKET = process.env.S3_BUCKET!;
 
 const IMAGE_FORMATS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
 const VIDEO_FORMATS = ['.mp4', '.mov', '.avi'];
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024;  // 20 MB per image
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB for video
 const MAX_IMAGES = 10;
 
 export interface UploadedFile {
@@ -18,8 +19,10 @@ export interface UploadedFile {
 }
 
 function validateFile(file: UploadedFile, mediaType: 'image' | 'video'): void {
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`File ${file.originalName} exceeds 100MB limit`);
+  const limit = mediaType === 'image' ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE;
+  const limitMB = mediaType === 'image' ? '20MB' : '100MB';
+  if (file.size > limit) {
+    throw new Error(`File ${file.originalName} exceeds ${limitMB} limit`);
   }
   const ext = path.extname(file.originalName).toLowerCase();
   if (mediaType === 'image' && !IMAGE_FORMATS.includes(ext)) {
