@@ -27,18 +27,21 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
 
-app.use(cors({
+const corsOptions: cors.CorsOptions = {
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
-    // Allow any localhost origin for dev
     if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) return cb(null, true);
-    // Allow Vercel deployments
     if (origin.endsWith('.vercel.app') || origin.includes('vercel.app')) return cb(null, true);
     if (ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.length === 0) return cb(null, true);
     cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // handle preflight for all routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
