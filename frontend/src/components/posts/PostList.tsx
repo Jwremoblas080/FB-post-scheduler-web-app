@@ -137,6 +137,8 @@ export default function PostList({ refreshKey = 0, onStatusChange }: PostListPro
   const [editPost, setEditPost] = useState<Post | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 5;
 
   // Track previous statuses to detect transitions
   const prevStatusMap = useRef<Map<string, Post['status']>>(new Map());
@@ -227,12 +229,19 @@ export default function PostList({ refreshKey = 0, onStatusChange }: PostListPro
     publishing: posts.filter(isPublishing).length,
   };
 
-  const visible = posts
+  const filtered = posts
     .filter(p => statusFilter === 'all' || p.status === statusFilter)
     .sort((a, b) => {
       const diff = new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime();
       return sortDir === 'asc' ? diff : -diff;
     });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const visible = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  function changeFilter(f: StatusFilter) { setStatusFilter(f); setPage(1); }
+  function changeSort() { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); setPage(1); }
 
   if (loading) return <p style={{ color: 'var(--text-light)', fontSize: 14 }}>Loading…</p>;
   if (error)   return <p style={{ color: 'var(--danger)', fontSize: 14 }}>{error}</p>;
@@ -262,31 +271,31 @@ export default function PostList({ refreshKey = 0, onStatusChange }: PostListPro
       {/* Stats row */}
       {posts.length > 0 && (
         <div className="stats-row">
-          <button className={`stats-chip${statusFilter === 'all' ? ' active' : ''}`} onClick={() => setStatusFilter('all')}>
+          <button className={`stats-chip${statusFilter === 'all' ? ' active' : ''}`} onClick={() => changeFilter('all')}>
             {posts.length} total
           </button>
           <button
             className={`stats-chip stats-chip-pending${statusFilter === 'pending' ? ' active' : ''}`}
-            onClick={() => setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending')}
+            onClick={() => changeFilter(statusFilter === 'pending' ? 'all' : 'pending')}
           >
             {stats.pending} pending
           </button>
           <button
             className={`stats-chip stats-chip-posted${statusFilter === 'posted' ? ' active' : ''}`}
-            onClick={() => setStatusFilter(statusFilter === 'posted' ? 'all' : 'posted')}
+            onClick={() => changeFilter(statusFilter === 'posted' ? 'all' : 'posted')}
           >
             {stats.posted} posted
           </button>
           {stats.failed > 0 && (
             <button
               className={`stats-chip stats-chip-failed${statusFilter === 'failed' ? ' active' : ''}`}
-              onClick={() => setStatusFilter(statusFilter === 'failed' ? 'all' : 'failed')}
+              onClick={() => changeFilter(statusFilter === 'failed' ? 'all' : 'failed')}
             >
               {stats.failed} failed
             </button>
           )}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} title="Toggle sort">
+            <button className="btn btn-ghost btn-sm" onClick={changeSort} title="Toggle sort">
               {sortDir === 'asc' ? '↑ Oldest' : '↓ Newest'}
             </button>
             <button className="btn btn-ghost btn-sm" onClick={() => fetchPosts(true)} title="Refresh">↻</button>
@@ -303,74 +312,107 @@ export default function PostList({ refreshKey = 0, onStatusChange }: PostListPro
       ) : visible.length === 0 ? (
         <div className="empty-state">
           <p style={{ fontSize: 13 }}>No {statusFilter} posts.</p>
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setStatusFilter('all')}>Show all</button>
+          <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => changeFilter('all')}>Show all</button>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {visible.map(post => {
-            const paths = parseMediaPaths(post.mediaUrls);
-            const firstPath = paths[0];
-            const publishing = isPublishing(post);
-            const canEdit    = post.status === 'pending' && !publishing;
-            const canDelete  = post.status === 'pending' || post.status === 'failed';
-            const canRetry   = post.status === 'failed';
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {visible.map(post => {
+              const paths = parseMediaPaths(post.mediaUrls);
+              const firstPath = paths[0];
+              const publishing = isPublishing(post);
+              const canEdit    = post.status === 'pending' && !publishing;
+              const canDelete  = post.status === 'pending' || post.status === 'failed';
+              const canRetry   = post.status === 'failed';
 
-            return (
-              <div key={post.id} className={`post-card${publishing ? ' post-card-publishing' : ''}`}>
-                {/* Thumbnail */}
-                <div className="post-thumb">
-                  {post.mediaType === 'video' ? (
-                    <span className="post-thumb-video">▶</span>
-                  ) : (
-                    <img src={firstPath?.startsWith('http') ? firstPath : `/${firstPath?.replace(/^\//, '')}`} alt="thumbnail" />
-                  )}
-                  {publishing && <div className="post-thumb-pulse" />}
-                </div>
-
-                {/* Details */}
-                <div className="post-body">
-                  <div className="post-meta">
-                    {publishing ? (
-                      <span className="badge badge-publishing">
-                        <span className="badge-dot-pulse" />
-                        Publishing…
-                      </span>
+              return (
+                <div key={post.id} className={`post-card${publishing ? ' post-card-publishing' : ''}`}>
+                  {/* Thumbnail */}
+                  <div className="post-thumb">
+                    {post.mediaType === 'video' ? (
+                      <span className="post-thumb-video">▶</span>
                     ) : (
-                      <span className={BADGE[post.status]}>{post.status}</span>
+                      <img src={firstPath?.startsWith('http') ? firstPath : `/${firstPath?.replace(/^\//, '')}`} alt="thumbnail" />
                     )}
-                    {post.pageName && <span className="post-page">{post.pageName}</span>}
-                    {paths.length > 1 && <span style={{ fontSize: 11, color: 'var(--text-light)' }}>+{paths.length - 1} more</span>}
+                    {publishing && <div className="post-thumb-pulse" />}
                   </div>
-                  <p className="post-caption">{post.caption}</p>
-                  <p className="post-time">
-                    {formatDateTime(post.scheduledTime)}
-                    <span className="post-time-relative">{formatRelative(post.scheduledTime)}</span>
-                  </p>
-                  {canRetry && post.errorMessage && (
-                    <p className="post-error">{post.errorMessage}</p>
-                  )}
-                </div>
 
-                {/* Actions */}
-                <div className="post-actions">
-                  {canEdit && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => setEditPost(post)}>Edit</button>
-                  )}
-                  {canRetry && (
-                    <button className="btn btn-warning btn-sm" onClick={() => handleRetry(post.id)} disabled={retryingId === post.id}>
-                      {retryingId === post.id ? '…' : 'Retry'}
-                    </button>
-                  )}
-                  {canDelete && !publishing && (
-                    <button className="btn btn-danger-ghost btn-sm" onClick={() => setConfirmPost(post)} disabled={deletingId === post.id}>
-                      {deletingId === post.id ? '…' : 'Delete'}
-                    </button>
-                  )}
+                  {/* Details */}
+                  <div className="post-body">
+                    <div className="post-meta">
+                      {publishing ? (
+                        <span className="badge badge-publishing">
+                          <span className="badge-dot-pulse" />
+                          Publishing…
+                        </span>
+                      ) : (
+                        <span className={BADGE[post.status]}>{post.status}</span>
+                      )}
+                      {post.pageName && <span className="post-page">{post.pageName}</span>}
+                      {paths.length > 1 && <span style={{ fontSize: 11, color: 'var(--text-light)' }}>+{paths.length - 1} more</span>}
+                    </div>
+                    <p className="post-caption">{post.caption}</p>
+                    <p className="post-time">
+                      {formatDateTime(post.scheduledTime)}
+                      <span className="post-time-relative">{formatRelative(post.scheduledTime)}</span>
+                    </p>
+                    {canRetry && post.errorMessage && (
+                      <p className="post-error">{post.errorMessage}</p>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="post-actions">
+                    {canEdit && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => setEditPost(post)}>Edit</button>
+                    )}
+                    {canRetry && (
+                      <button className="btn btn-warning btn-sm" onClick={() => handleRetry(post.id)} disabled={retryingId === post.id}>
+                        {retryingId === post.id ? '…' : 'Retry'}
+                      </button>
+                    )}
+                    {canDelete && !publishing && (
+                      <button className="btn btn-danger-ghost btn-sm" onClick={() => setConfirmPost(post)} disabled={deletingId === post.id}>
+                        {deletingId === post.id ? '…' : 'Delete'}
+                      </button>
+                    )}
+                  </div>
                 </div>
+              );
+            })}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="pagination">
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+              >
+                ← Prev
+              </button>
+              <div className="pagination-pages">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                  <button
+                    key={p}
+                    className={`pagination-page${p === safePage ? ' active' : ''}`}
+                    onClick={() => setPage(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
               </div>
-            );
-          })}
-        </div>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </>
       )}
     </>
   );
