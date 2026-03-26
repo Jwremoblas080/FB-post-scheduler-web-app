@@ -9,28 +9,6 @@ provider:
   stage: ${opt:stage, 'dev'}
   memorySize: 512
   timeout: 29
-  httpApi:
-    cors:
-      allowedOrigins:
-        - 'https://fb-post-scheduler-web-app-m5uf.vercel.app'
-        - 'http://localhost:5173'
-        - 'http://localhost:5174'
-        - 'http://localhost:5175'
-        - 'http://localhost:5176'
-        - 'http://localhost:5177'
-        - 'http://localhost:5178'
-      allowedHeaders:
-        - Content-Type
-        - Authorization
-        - X-Requested-With
-      allowedMethods:
-        - GET
-        - POST
-        - PUT
-        - PATCH
-        - DELETE
-        - OPTIONS
-      allowCredentials: true
   environment:
     STAGE: ${self:provider.stage}
     FACEBOOK_APP_ID: '2790308504644722'

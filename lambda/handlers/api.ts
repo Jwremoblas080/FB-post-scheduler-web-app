@@ -1,6 +1,5 @@
 import serverless from 'serverless-http';
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
 import multer from 'multer';
 import { v4 as uuid } from 'uuid';
 import { AuthService } from '../services/authService';
@@ -25,23 +24,32 @@ import { DeleteCommand } from '@aws-sdk/lib-dynamodb';
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
 
-const corsOptions: cors.CorsOptions = {
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) return cb(null, true);
-    if (origin.endsWith('.vercel.app') || origin.includes('vercel.app')) return cb(null, true);
-    if (ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.length === 0) return cb(null, true);
-    cb(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-};
+function isOriginAllowed(origin: string): boolean {
+  if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) return true;
+  if (origin.endsWith('.vercel.app')) return true;
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  return false;
+}
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // handle preflight for all routes
+// Set CORS headers on every response — must run before any route
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && isOriginAllowed(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  // Handle preflight immediately
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
