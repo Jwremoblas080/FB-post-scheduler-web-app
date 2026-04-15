@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import DOMPurify from 'isomorphic-dompurify';
 
 /**
  * Sanitize input middleware - removes potentially malicious content
@@ -34,8 +33,19 @@ function sanitizeValue(value: any): any {
     return value;
   }
 
-  // Use DOMPurify to sanitize HTML/XSS
-  return DOMPurify.sanitize(value, { ALLOWED_TAGS: [] });
+  // Remove script tags and event handlers
+  let sanitized = value.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  sanitized = sanitized.replace(/on\w+\s*=\s*["'][^"']*["']/gi, '');
+  sanitized = sanitized.replace(/on\w+\s*=\s*[^\s>]*/gi, '');
+  
+  // Remove common XSS patterns
+  sanitized = sanitized.replace(/javascript:/gi, '');
+  sanitized = sanitized.replace(/data:text\/html/gi, '');
+  
+  // Remove null bytes
+  sanitized = sanitized.replace(/\0/g, '');
+
+  return sanitized;
 }
 
 /**

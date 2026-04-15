@@ -10,6 +10,10 @@ export const apiLimiter = rateLimit({
   message: { error: true, message: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting in development
+    return process.env.STAGE === 'dev';
+  },
 });
 
 /**
@@ -22,6 +26,10 @@ export const uploadLimiter = rateLimit({
   message: { error: true, message: 'Too many upload requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting in development
+    return process.env.STAGE === 'dev';
+  },
 });
 
 /**
@@ -34,4 +42,8 @@ export const authLimiter = rateLimit({
   message: { error: true, message: 'Too many authentication attempts, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting in development
+    return process.env.STAGE === 'dev';
+  },
 });
