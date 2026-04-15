@@ -36,6 +36,10 @@ function isOriginAllowed(origin: string): boolean {
       return true;
     }
   }
+  // Allow all Vercel deployments for this project
+  if (origin.endsWith('.vercel.app') && origin.includes('fb-post-scheduler-web-app')) {
+    return true;
+  }
   // In production, only allow explicitly listed origins
   return ALLOWED_ORIGINS.includes(origin);
 }

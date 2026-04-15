@@ -113,7 +113,7 @@ resources:
             - AllowedHeaders: ['*']
               AllowedMethods: [GET, PUT, POST]
               AllowedOrigins: 
-                - 'https://fb-post-scheduler-web-app-m5uf.vercel.app'
+                - 'https://fb-post-scheduler-web-app-*.vercel.app'
                 - 'http://localhost:5173'
               MaxAge: 3000
         PublicAccessBlockConfiguration:
