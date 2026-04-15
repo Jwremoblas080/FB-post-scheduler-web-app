@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomBytes } from 'crypto';
 import path from 'path';
 
@@ -73,4 +74,65 @@ export async function uploadVideo(file: UploadedFile): Promise<string> {
     ContentType: file.mimetype,
   }));
   return getPublicUrl(key);
+}
+
+export interface PresignedUrlRequest {
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+}
+
+export interface PresignedUrlResponse {
+  uploadUrl: string;
+  publicUrl: string;
+  key: string;
+}
+
+/**
+ * Generate presigned URLs for direct browser-to-S3 upload
+ * This bypasses Lambda's 6MB payload limit
+ */
+export async function generatePresignedUrls(
+  files: PresignedUrlRequest[],
+  mediaType: 'image' | 'video'
+): Promise<PresignedUrlResponse[]> {
+  if (files.length === 0) {
+    throw new Error('No files provided');
+  }
+
+  if (mediaType === 'image' && files.length > MAX_IMAGES) {
+    throw new Error(`Max ${MAX_IMAGES} images allowed`);
+  }
+
+  const urls: PresignedUrlResponse[] = [];
+
+  for (const file of files) {
+    // Validate file
+    validateFile(
+      {
+        originalName: file.fileName,
+        size: file.fileSize,
+        buffer: Buffer.from(''), // Not needed for validation
+        mimetype: file.fileType,
+      },
+      mediaType
+    );
+
+    // Generate S3 key
+    const key = generateKey(file.fileName);
+
+    // Create presigned URL for PUT operation
+    const command = new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      ContentType: file.fileType,
+    });
+
+    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 }); // 5 minutes
+    const publicUrl = getPublicUrl(key);
+
+    urls.push({ uploadUrl, publicUrl, key });
+  }
+
+  return urls;
 }

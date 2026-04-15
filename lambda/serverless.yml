@@ -11,15 +11,16 @@ provider:
   timeout: 29
   environment:
     STAGE: ${self:provider.stage}
-    FACEBOOK_APP_ID: '2790308504644722'
-    FACEBOOK_APP_SECRET: '50e5bd23e3798dc46ecb1de6d280924c'
-    FACEBOOK_REDIRECT_URI: 'https://o6i2c5bnjg.execute-api.us-east-1.amazonaws.com/auth/callback'
-    ENCRYPTION_KEY: 'opEIH795ydKhJtMZ6Dk2cjsuVAWNvbSG'
-    ENCRYPTION_SECRET: 'opEIH795ydKhJtMZ6Dk2cjsuVAWNvbSG'
+    FACEBOOK_APP_ID: ${ssm:/fb-scheduler/${self:provider.stage}/facebook-app-id}
+    FACEBOOK_APP_SECRET: ${ssm(raw):/fb-scheduler/${self:provider.stage}/facebook-app-secret}
+    FACEBOOK_REDIRECT_URI: ${ssm:/fb-scheduler/${self:provider.stage}/facebook-redirect-uri}
+    ENCRYPTION_KEY: ${ssm(raw):/fb-scheduler/${self:provider.stage}/encryption-key}
+    ENCRYPTION_SECRET: ${ssm(raw):/fb-scheduler/${self:provider.stage}/encryption-secret}
+    JWT_SECRET: ${ssm(raw):/fb-scheduler/${self:provider.stage}/jwt-secret}
     S3_BUCKET: ${self:custom.s3Bucket}
     DYNAMODB_TABLE: ${self:custom.dynamoTable}
-    FRONTEND_URL: 'https://fb-post-scheduler-web-app-m5uf.vercel.app'
-    ALLOWED_ORIGINS: 'https://fb-post-scheduler-web-app-m5uf.vercel.app,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177,http://localhost:5178'
+    FRONTEND_URL: ${ssm:/fb-scheduler/${self:provider.stage}/frontend-url}
+    ALLOWED_ORIGINS: ${ssm:/fb-scheduler/${self:provider.stage}/allowed-origins}
   iam:
     role:
       statements:
@@ -40,6 +41,11 @@ provider:
             - s3:GetObject
             - s3:DeleteObject
           Resource: !Sub 'arn:aws:s3:::${self:custom.s3Bucket}/*'
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fb-scheduler/${self:provider.stage}/*'
 
 custom:
   s3Bucket: fb-post-scheduler-uploads-${self:provider.stage}
@@ -106,13 +112,15 @@ resources:
           CorsRules:
             - AllowedHeaders: ['*']
               AllowedMethods: [GET, PUT, POST]
-              AllowedOrigins: ['*']
+              AllowedOrigins: 
+                - 'https://fb-post-scheduler-web-app-m5uf.vercel.app'
+                - 'http://localhost:5173'
               MaxAge: 3000
         PublicAccessBlockConfiguration:
-          BlockPublicAcls: false
-          BlockPublicPolicy: false
-          IgnorePublicAcls: false
-          RestrictPublicBuckets: false
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
 
     MediaBucketPolicy:
       Type: AWS::S3::BucketPolicy

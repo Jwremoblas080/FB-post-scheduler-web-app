@@ -1,10 +1,9 @@
 import serverless from 'serverless-http';
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import multer from 'multer';
 import { v4 as uuid } from 'uuid';
 import { AuthService } from '../services/authService';
-import { GraphApiClient } from '../services/graphApiClient';
-import { uploadImages, uploadVideo } from '../services/s3Upload';
+import { uploadImages, uploadVideo, generatePresignedUrls, PresignedUrlRequest } from '../services/s3Upload';
 import {
   createPost,
   getAllPosts,
@@ -20,6 +19,10 @@ import {
   userSK,
 } from '../services/dynamoDb';
 import { DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { requireAuth, generateToken, AuthRequest } from '../middleware/auth';
+import { sanitizeInput, validateMediaUrls, validatePageId } from '../middleware/validation';
+import { securityHeaders } from '../middleware/security';
+import { apiLimiter, uploadLimiter, authLimiter } from '../middleware/rateLimiter';
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
@@ -27,11 +30,18 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
 
 function isOriginAllowed(origin: string): boolean {
-  if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) return true;
-  if (origin.endsWith('.vercel.app')) return true;
-  if (ALLOWED_ORIGINS.includes(origin)) return true;
-  return false;
+  // Only allow localhost in development
+  if (process.env.NODE_ENV === 'development' || process.env.STAGE === 'dev') {
+    if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+      return true;
+    }
+  }
+  // In production, only allow explicitly listed origins
+  return ALLOWED_ORIGINS.includes(origin);
 }
+
+// Apply security headers to all responses
+app.use(securityHeaders);
 
 // Set CORS headers on every response — must run before any route
 app.use((req, res, next) => {
@@ -50,15 +60,19 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Apply input sanitization to all POST/PUT/PATCH requests
+app.use(sanitizeInput);
 
 const auth = new AuthService();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // ─── Auth routes ─────────────────────────────────────────────────────────────
 
-app.post('/auth/login', (req, res) => {
+app.post('/auth/login', authLimiter, (req, res) => {
   try {
     const origin = req.headers.origin || req.headers.referer || FRONTEND_URL;
     let frontendBase = FRONTEND_URL;
@@ -73,7 +87,7 @@ app.post('/auth/login', (req, res) => {
   }
 });
 
-app.get('/auth/callback', async (req: Request, res: Response): Promise<void> => {
+app.get('/auth/callback', authLimiter, async (req: Request, res: Response): Promise<void> => {
   const { code, error: oauthError, error_description, state } = req.query;
 
   // Decode frontend URL from state param (set during login)
@@ -96,15 +110,18 @@ app.get('/auth/callback', async (req: Request, res: Response): Promise<void> => 
   }
 
   try {
-    await auth.handleCallback(code);
-    res.redirect(`${frontendBase}/auth/callback`);
+    const result = await auth.handleCallback(code);
+    // Generate JWT token for the user
+    const token = generateToken(result.fbUserId);
+    // Redirect with token in URL (frontend will store it)
+    res.redirect(`${frontendBase}/auth/callback?token=${token}`);
   } catch (e: any) {
     const desc = encodeURIComponent(e.message || 'Authentication failed');
     res.redirect(`${frontendBase}/auth/callback?error=auth_failed&error_description=${desc}`);
   }
 });
 
-app.get('/auth/pages', async (_req, res): Promise<void> => {
+app.get('/auth/pages', requireAuth, async (_req, res): Promise<void> => {
   try {
     const cached = await auth.getCachedPages();
     if (cached.length > 0) {
@@ -124,7 +141,37 @@ app.get('/auth/pages', async (_req, res): Promise<void> => {
 
 // ─── Upload routes ────────────────────────────────────────────────────────────
 
-app.post('/upload/images', upload.array('images', 10), async (req: Request, res: Response): Promise<void> => {
+// Generate presigned URLs for direct browser-to-S3 upload
+app.post('/upload/presigned-urls/images', requireAuth, uploadLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { files } = req.body as { files: PresignedUrlRequest[] };
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      res.status(400).json({ error: true, message: 'No files provided' });
+      return;
+    }
+    const urls = await generatePresignedUrls(files, 'image');
+    res.json({ success: true, urls });
+  } catch (e: any) {
+    res.status(400).json({ error: true, message: e.message });
+  }
+});
+
+app.post('/upload/presigned-urls/video', requireAuth, uploadLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { files } = req.body as { files: PresignedUrlRequest[] };
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      res.status(400).json({ error: true, message: 'No file provided' });
+      return;
+    }
+    const urls = await generatePresignedUrls(files, 'video');
+    res.json({ success: true, urls });
+  } catch (e: any) {
+    res.status(400).json({ error: true, message: e.message });
+  }
+});
+
+// Legacy endpoints (kept for backward compatibility)
+app.post('/upload/images', requireAuth, upload.array('images', 10), async (req: Request, res: Response): Promise<void> => {
   try {
     const files = (req.files as Express.Multer.File[]) || [];
     if (files.length === 0) { res.status(400).json({ error: true, message: 'No image files provided' }); return; }
@@ -135,7 +182,7 @@ app.post('/upload/images', upload.array('images', 10), async (req: Request, res:
   }
 });
 
-app.post('/upload/video', upload.single('video'), async (req: Request, res: Response): Promise<void> => {
+app.post('/upload/video', requireAuth, upload.single('video'), async (req: Request, res: Response): Promise<void> => {
   try {
     const file = req.file;
     if (!file) { res.status(400).json({ error: true, message: 'No video file provided' }); return; }
@@ -148,7 +195,7 @@ app.post('/upload/video', upload.single('video'), async (req: Request, res: Resp
 
 // ─── Post routes ──────────────────────────────────────────────────────────────
 
-app.post('/posts', async (req: Request, res: Response): Promise<void> => {
+app.post('/posts', requireAuth, apiLimiter, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { caption, mediaPaths, mediaUrls, mediaType, scheduledTime, pageId } = req.body;
 
@@ -167,6 +214,16 @@ app.post('/posts', async (req: Request, res: Response): Promise<void> => {
     if (isNaN(scheduledDate.getTime())) throw new Error('Missing required fields: scheduledTime');
     if (scheduledDate <= new Date()) throw new Error('Scheduled time must be in the future');
     if (mediaType !== 'image' && mediaType !== 'video') throw new Error('Invalid media type. Must be "image" or "video"');
+    
+    // Validate media URLs
+    if (!validateMediaUrls(resolvedUrls)) {
+      throw new Error('Invalid media URLs provided');
+    }
+    
+    // Validate page ID
+    if (!validatePageId(pageId)) {
+      throw new Error('Invalid page ID format');
+    }
 
     const postId = uuid();
     const post = await createPost({
@@ -197,12 +254,14 @@ app.post('/posts', async (req: Request, res: Response): Promise<void> => {
   } catch (e: any) {
     const isValidation = e.message.includes('Missing required fields') ||
       e.message.includes('Scheduled time must be in the future') ||
-      e.message.includes('Invalid media type');
+      e.message.includes('Invalid media type') ||
+      e.message.includes('Invalid media URLs') ||
+      e.message.includes('Invalid page ID');
     res.status(isValidation ? 400 : 500).json({ error: true, message: e.message });
   }
 });
 
-app.get('/posts', async (_req, res): Promise<void> => {
+app.get('/posts', requireAuth, apiLimiter, async (_req, res): Promise<void> => {
   try {
     const rows = await getAllPosts();
     const posts = rows.map(p => ({
@@ -222,7 +281,7 @@ app.get('/posts', async (_req, res): Promise<void> => {
   }
 });
 
-app.delete('/posts/:id', async (req: Request, res: Response): Promise<void> => {
+app.delete('/posts/:id', requireAuth, apiLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const post = await getPost(id);
@@ -236,7 +295,7 @@ app.delete('/posts/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // PATCH /posts/:id — edit caption, scheduledTime, or pageId
-app.patch('/posts/:id', async (req: Request, res: Response): Promise<void> => {
+app.patch('/posts/:id', requireAuth, apiLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const { caption, scheduledTime, pageId } = req.body;
@@ -284,7 +343,7 @@ app.patch('/posts/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /posts/:id/retry — reset a failed post back to pending
-app.post('/posts/:id/retry', async (req: Request, res: Response): Promise<void> => {
+app.post('/posts/:id/retry', requireAuth, apiLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const post = await getPost(id);
@@ -307,7 +366,7 @@ app.post('/posts/:id/retry', async (req: Request, res: Response): Promise<void> 
 });
 
 // DELETE /auth/disconnect — clear stored user session
-app.delete('/auth/disconnect', async (_req, res): Promise<void> => {
+app.delete('/auth/disconnect', requireAuth, async (_req, res): Promise<void> => {
   try {
     const user = await getLatestUser();
     if (user) {

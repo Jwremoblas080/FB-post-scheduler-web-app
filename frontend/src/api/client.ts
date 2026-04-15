@@ -12,4 +12,27 @@ const apiClient = axios.create({
   withCredentials: true,
 });
 
+// Add JWT token to all requests
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle 401 responses by clearing token and redirecting to login
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('fb_connected');
+      // Optionally redirect to login
+      // window.location.href = '/';
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default apiClient;
