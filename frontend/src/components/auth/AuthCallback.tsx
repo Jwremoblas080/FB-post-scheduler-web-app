@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 type CallbackState = 'loading' | 'success' | 'error';
 
 function AuthCallback() {
   const [state, setState] = useState<CallbackState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -28,9 +30,14 @@ function AuthCallback() {
 
     setState('success');
     localStorage.setItem('fb_connected', 'true');
-    const timer = setTimeout(() => { window.location.href = '/'; }, 2000);
+    
+    // Use React Router navigation instead of window.location
+    const timer = setTimeout(() => { 
+      navigate('/', { replace: true });
+    }, 2000);
+    
     return () => clearTimeout(timer);
-  }, []);
+  }, [navigate]);
 
   return (
     <div className="auth-page">
