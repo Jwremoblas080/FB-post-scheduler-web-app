@@ -13,7 +13,7 @@ provider:
     STAGE: ${self:provider.stage}
     FACEBOOK_APP_ID: '2790308504644722'
     FACEBOOK_APP_SECRET: '50e5bd23e3798dc46ecb1de6d280924c'
-    FACEBOOK_REDIRECT_URI: 'https://njidx1ny8i.execute-api.us-east-1.amazonaws.com/auth/callback'
+    FACEBOOK_REDIRECT_URI: 'https://o6i2c5bnjg.execute-api.us-east-1.amazonaws.com/auth/callback'
     ENCRYPTION_KEY: 'opEIH795ydKhJtMZ6Dk2cjsuVAWNvbSG'
     ENCRYPTION_SECRET: 'opEIH795ydKhJtMZ6Dk2cjsuVAWNvbSG'
     S3_BUCKET: ${self:custom.s3Bucket}
