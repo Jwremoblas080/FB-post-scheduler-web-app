@@ -10,6 +10,7 @@ function AuthCallback() {
     const params = new URLSearchParams(window.location.search);
     const error = params.get('error');
     const errorDescription = params.get('error_description');
+    const token = params.get('token');
 
     if (error) {
       const message = errorDescription
@@ -18,6 +19,11 @@ function AuthCallback() {
       setErrorMessage(message);
       setState('error');
       return;
+    }
+
+    // Store the JWT token if present
+    if (token) {
+      localStorage.setItem('auth_token', token);
     }
 
     setState('success');
