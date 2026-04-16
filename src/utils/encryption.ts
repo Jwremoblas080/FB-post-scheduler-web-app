@@ -15,7 +15,7 @@ const TAG_LENGTH = 16;
  * Derive an encryption key from a secret using PBKDF2
  */
 function deriveKey(secret: string, salt: Buffer): Buffer {
-  return crypto.pbkdf2Sync(secret, salt, 100000, KEY_LENGTH, 'sha256');
+  return crypto.pbkdf2Sync(secret, salt, 600000, KEY_LENGTH, 'sha256');
 }
 
 /**

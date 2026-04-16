@@ -18,6 +18,7 @@ provider:
     ENCRYPTION_SECRET: ${ssm(raw):/fb-scheduler/${self:provider.stage}/encryption-secret}
     JWT_SECRET: ${ssm(raw):/fb-scheduler/${self:provider.stage}/jwt-secret}
     S3_BUCKET: ${self:custom.s3Bucket}
+    S3_REGION: ${self:provider.region}
     DYNAMODB_TABLE: ${self:custom.dynamoTable}
     FRONTEND_URL: ${ssm:/fb-scheduler/${self:provider.stage}/frontend-url}
     ALLOWED_ORIGINS: ${ssm:/fb-scheduler/${self:provider.stage}/allowed-origins}

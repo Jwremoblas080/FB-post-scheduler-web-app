@@ -42,7 +42,8 @@ function generateKey(originalName: string): string {
 }
 
 export function getPublicUrl(key: string): string {
-  return `https://${BUCKET}.s3.amazonaws.com/${key}`;
+  const region = process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1';
+  return `https://${BUCKET}.s3.${region}.amazonaws.com/${key}`;
 }
 
 export async function uploadImages(files: UploadedFile[]): Promise<string[]> {

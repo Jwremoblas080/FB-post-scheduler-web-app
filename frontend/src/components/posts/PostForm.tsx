@@ -158,13 +158,23 @@ export default function PostForm({ onSuccess, onError }: PostFormProps) {
       if (mediaType === 'images') {
         const fd = new FormData();
         imageFiles.forEach(f => fd.append('images', f));
-        const res = await apiClient.post<{ filePaths: string[] }>('/upload/images', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-        mediaPaths = res.data.filePaths;
+        try {
+          const res = await apiClient.post<{ filePaths: string[] }>('/upload/images', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+          mediaPaths = res.data.filePaths;
+        } catch (uploadErr: any) {
+          const uploadMsg = uploadErr?.response?.data?.message || 'Failed to upload images';
+          throw new Error(`Upload failed: ${uploadMsg}`);
+        }
       } else {
         const fd = new FormData();
         fd.append('video', videoFile!);
-        const res = await apiClient.post<{ filePath: string }>('/upload/video', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-        mediaPaths = [res.data.filePath];
+        try {
+          const res = await apiClient.post<{ filePath: string }>('/upload/video', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+          mediaPaths = [res.data.filePath];
+        } catch (uploadErr: any) {
+          const uploadMsg = uploadErr?.response?.data?.message || 'Failed to upload video';
+          throw new Error(`Upload failed: ${uploadMsg}`);
+        }
       }
       await apiClient.post('/posts', {
         caption,

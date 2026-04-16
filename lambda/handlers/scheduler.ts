@@ -57,11 +57,26 @@ export async function handler(): Promise<void> {
     return;
   }
 
+  // Check if token is expired
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (user.tokenExpiry <= nowSec) {
+    console.error('[scheduler] User token expired. Token expiry:', new Date(user.tokenExpiry * 1000).toISOString());
+    // Mark all pending posts as failed with clear message
+    for (const post of posts) {
+      await updatePostStatus(post.postId, 'failed', 'Facebook token expired. Please reconnect your Facebook account.');
+    }
+    return;
+  }
+
   let userToken: string;
   try {
     userToken = decrypt(user.accessToken);
-  } catch {
-    console.error('[scheduler] Failed to decrypt user token');
+  } catch (e) {
+    console.error('[scheduler] Failed to decrypt user token:', (e as Error).message);
+    // Mark all pending posts as failed
+    for (const post of posts) {
+      await updatePostStatus(post.postId, 'failed', 'Token decryption failed. Please reconnect your Facebook account.');
+    }
     return;
   }
 

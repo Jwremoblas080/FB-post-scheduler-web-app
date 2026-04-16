@@ -12,6 +12,6 @@
     "declaration": false,
     "sourceMap": false
   },
-  "include": ["handlers/**/*", "services/**/*", "utils/**/*"],
+  "include": ["handlers/**/*", "middleware/**/*", "services/**/*", "utils/**/*"],
   "exclude": ["node_modules", "dist"]
 }
