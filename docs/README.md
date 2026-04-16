@@ -9,6 +9,7 @@ This folder contains all project documentation files.
 - **QUICK_START.md** - Fast reference guide for quick setup
 - **DEPLOYMENT_GUIDE.md** - Complete deployment instructions
 - **DEPLOYMENT_CHECKLIST.md** - Pre-deployment verification checklist
+- **DEPLOYMENT_ARCHITECTURE.md** - Where frontend and backend are deployed (Vercel + AWS)
 
 ## 🔐 Security
 
